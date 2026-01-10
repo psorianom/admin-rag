@@ -581,9 +581,9 @@ def main():
     """Main entry point."""
     ingestion = VastAIIngestion(
         max_price=0.25,           # Max $/hour
-        min_gpu_ram=12,           # Minimum 12GB VRAM for BGE-M3
+        min_gpu_ram=24,           # Minimum 24GB VRAM for BGE-M3 with batch processing
         disk_size=30,             # GB
-        min_download_speed=100,   # Mbps (for downloading BGE-M3 model ~2GB)
+        min_download_speed=100,   # Mbps (for downloading BGE-M3 model ~2.7GB)
         min_upload_speed=50,      # Mbps (for uploading results ~50-70MB)
         keep_alive=True           # Keep instance running for testing (destroy manually)
     )
