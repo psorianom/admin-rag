@@ -3,7 +3,7 @@ Automate BGE-M3 embedding generation on vast.ai GPU instance.
 
 This script:
 1. Provisions a vast.ai GPU instance
-2. Uploads JSONL files (40MB)
+2. Uploads JSONL files (40MB) and embedding script
 3. Generates BGE-M3 embeddings on GPU
 4. Downloads embedded JSONL files back to local machine (gzipped)
 5. Destroys instance
@@ -11,7 +11,6 @@ This script:
 Requirements:
 - vast.ai CLI: pip install vastai
 - vast.ai API key: vastai set api-key YOUR_KEY
-- GitHub repo must be public (for cloning)
 
 Cost: ~$0.10-0.20 total
 
@@ -306,8 +305,8 @@ class VastAIIngestion:
         return False
 
     def upload_files(self) -> bool:
-        """Upload JSONL files to instance."""
-        print(f"\n📤 Uploading JSONL files...")
+        """Upload JSONL files and embedding script to instance."""
+        print(f"\n📤 Uploading files...")
         self.logger.info(f"Starting file uploads to {self.ssh_host}:{self.ssh_port}")
 
         ssh_target = f"root@{self.ssh_host}"
@@ -315,25 +314,27 @@ class VastAIIngestion:
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         scp_opts = f"-P {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-        # Create remote directory
+        # Create remote directories
         try:
-            self.logger.debug("Creating remote directory /workspace/data/processed")
+            self.logger.debug("Creating remote directories")
             subprocess.run(
-                f"ssh {ssh_opts} {ssh_target} 'mkdir -p /workspace/data/processed'",
+                f"ssh {ssh_opts} {ssh_target} 'mkdir -p /workspace/data/processed /workspace/scripts'",
                 shell=True, check=True, capture_output=True
             )
         except subprocess.CalledProcessError as e:
-            print(f"   ❌ Failed to create directory: {e.stderr.decode()}")
-            self.logger.error(f"Failed to create remote directory: {e.stderr.decode()}")
+            print(f"   ❌ Failed to create directories: {e.stderr.decode()}")
+            self.logger.error(f"Failed to create remote directories: {e.stderr.decode()}")
             return False
 
         # Upload files
+        embed_script = self.project_root / "scripts" / "embed_chunks.py"
         files = [
-            (self.code_travail_jsonl, "code_travail_chunks.jsonl"),
-            (self.kali_jsonl, "kali_chunks.jsonl")
+            (self.code_travail_jsonl, "/workspace/data/processed/", "code_travail_chunks.jsonl"),
+            (self.kali_jsonl, "/workspace/data/processed/", "kali_chunks.jsonl"),
+            (embed_script, "/workspace/scripts/", "embed_chunks.py")
         ]
 
-        for local_path, filename in files:
+        for local_path, remote_dir, filename in files:
             print(f"   Uploading {filename}...")
             size_mb = local_path.stat().st_size / 1024 / 1024
             self.logger.info(f"Uploading {filename} ({size_mb:.1f}MB)")
@@ -341,7 +342,7 @@ class VastAIIngestion:
             start_time = time.time()
             try:
                 subprocess.run(
-                    f"scp {scp_opts} {local_path} {ssh_target}:/workspace/data/processed/",
+                    f"scp {scp_opts} {local_path} {ssh_target}:{remote_dir}",
                     shell=True, check=True, capture_output=True
                 )
                 elapsed = time.time() - start_time
@@ -365,23 +366,11 @@ class VastAIIngestion:
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
         commands = [
-            # Install system dependencies (no Docker needed)
-            "apt-get update -qq && apt-get install -y -qq git curl gzip",
+            # Install Python dependencies directly (no Poetry needed)
+            "pip install -q sentence-transformers tqdm",
 
-            # Install Poetry
-            "curl -sSL https://install.python-poetry.org | python3 -",
-            "export PATH='/root/.local/bin:$PATH'",
-
-            # Clone repo
-            "cd /workspace && git clone https://github.com/psorianom/admin-rag.git",
-            "cd /workspace/admin-rag",
-
-            # Copy JSONL files to repo
-            "cp /workspace/data/processed/*.jsonl ./data/processed/",
-
-            # Install dependencies and run embedding
-            "/root/.local/bin/poetry install",
-            "/root/.local/bin/poetry run python scripts/embed_chunks.py",
+            # Run embedding script
+            "cd /workspace && python scripts/embed_chunks.py",
 
             # Compress output files
             "gzip data/processed/code_travail_chunks.jsonl",
@@ -435,7 +424,7 @@ class VastAIIngestion:
                 start_time = time.time()
 
                 subprocess.run(
-                    f"scp {scp_opts} {ssh_target}:/workspace/admin-rag/data/processed/{filename} {download_dir}/",
+                    f"scp {scp_opts} {ssh_target}:/workspace/data/processed/{filename} {download_dir}/",
                     shell=True, check=True
                 )
 
