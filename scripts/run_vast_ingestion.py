@@ -149,26 +149,28 @@ class VastAIIngestion:
         print(f"   Filters:")
         print(f"     - GPU RAM >= {self.min_gpu_ram}GB")
         print(f"     - Price <= ${self.max_price}/hr")
-        print(f"     - Download >= {self.min_download_speed} Mbps")
-        print(f"     - Upload >= {self.min_upload_speed} Mbps")
+        print(f"     - Download perf >= {self.min_download_speed} Mbps")
+        print(f"     - Reliability > 0.95")
 
-        # Search query
+        # Search query - using dlperf (tested) instead of inet_down (self-reported)
         query = (
             f"gpu_ram >= {self.min_gpu_ram} "
             f"reliability > 0.95 "
             f"num_gpus=1 "
             f"dph_total <= {self.max_price} "
             f"cuda_max_good >= 12.0 "
-            f"inet_down >= {self.min_download_speed} "
-            f"inet_up >= {self.min_upload_speed}"
+            f"dlperf >= {self.min_download_speed} "  # Actual tested download performance
+            f"disk_space >= {self.disk_size}"
         )
 
         self.logger.info(f"Searching instances with query: {query}")
 
         try:
+            # Sort by score (ML workload performance) then price
+            # Score considers: reliability, bandwidth, compute capability
             result = subprocess.run(
                 ["vastai", "search", "offers", query,
-                 "--order", "dph_total", "--raw"],
+                 "--order", "score-", "--raw"],  # Sort by score descending (best first)
                 capture_output=True, text=True, check=True
             )
 
@@ -177,27 +179,31 @@ class VastAIIngestion:
             if not offers:
                 print("   ❌ No instances found matching criteria")
                 print(f"      Try increasing max_price (current: ${self.max_price}/hr)")
-                self.logger.warning(f"No instances found with criteria: max_price=${self.max_price}/hr")
+                print(f"      Or lowering min_download_speed (current: {self.min_download_speed} Mbps)")
+                self.logger.warning(f"No instances found with criteria: max_price=${self.max_price}/hr, dlperf>={self.min_download_speed}")
                 return None
 
             self.logger.info(f"Found {len(offers)} matching instances")
 
             # Show top 3 options
-            print(f"\n   Found {len(offers)} instances. Top 3:")
+            print(f"\n   Found {len(offers)} instances. Top 3 (by score):")
             for i, offer in enumerate(offers[:3], 1):
+                dlperf = offer.get('dlperf', 0)
+                score = offer.get('score', 0)
                 print(f"   {i}. ${offer['dph_total']:.3f}/hr | "
                       f"{offer['gpu_name']} | "
                       f"{offer['gpu_ram']/1024:.0f}GB VRAM | "
-                      f"↓{offer.get('inet_down', 0):.0f}Mbps ↑{offer.get('inet_up', 0):.0f}Mbps | "
+                      f"DL: {dlperf:.0f}Mbps | "
+                      f"Score: {score:.1f} | "
                       f"Reliability: {offer.get('reliability2', 0):.1%}")
                 self.logger.debug(f"Option {i}: {offer}")
 
-            # Select cheapest
+            # Select best score
             best_offer = offers[0]
-            print(f"\n   ✅ Selected: {best_offer['gpu_name']} @ ${best_offer['dph_total']:.3f}/hr")
+            print(f"\n   ✅ Selected: {best_offer['gpu_name']} @ ${best_offer['dph_total']:.3f}/hr (score: {best_offer.get('score', 0):.1f})")
             self.logger.info(f"Selected instance {best_offer['id']}: {best_offer['gpu_name']}, "
                            f"${best_offer['dph_total']:.3f}/hr, "
-                           f"↓{best_offer.get('inet_down', 0):.0f}Mbps ↑{best_offer.get('inet_up', 0):.0f}Mbps")
+                           f"dlperf={best_offer.get('dlperf', 0):.0f}Mbps, score={best_offer.get('score', 0):.1f}")
 
             return best_offer['id']
 
