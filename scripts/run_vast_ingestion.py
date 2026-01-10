@@ -311,7 +311,9 @@ class VastAIIngestion:
         self.logger.info(f"Starting file uploads to {self.ssh_host}:{self.ssh_port}")
 
         ssh_target = f"root@{self.ssh_host}"
+        # Note: ssh uses -p (lowercase), scp uses -P (uppercase)
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        scp_opts = f"-P {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
         # Create remote directory
         try:
@@ -339,7 +341,7 @@ class VastAIIngestion:
             start_time = time.time()
             try:
                 subprocess.run(
-                    f"scp {ssh_opts} {local_path} {ssh_target}:/workspace/data/processed/",
+                    f"scp {scp_opts} {local_path} {ssh_target}:/workspace/data/processed/",
                     shell=True, check=True, capture_output=True
                 )
                 elapsed = time.time() - start_time
@@ -415,7 +417,8 @@ class VastAIIngestion:
         self.logger.info(f"Downloading embedded JSONL files")
 
         ssh_target = f"root@{self.ssh_host}"
-        ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        # Note: scp uses -P (uppercase) for port
+        scp_opts = f"-P {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
         # Download directory
         download_dir = self.project_root / "data" / "processed"
@@ -432,7 +435,7 @@ class VastAIIngestion:
                 start_time = time.time()
 
                 subprocess.run(
-                    f"scp {ssh_opts} {ssh_target}:/workspace/admin-rag/data/processed/{filename} {download_dir}/",
+                    f"scp {scp_opts} {ssh_target}:/workspace/admin-rag/data/processed/{filename} {download_dir}/",
                     shell=True, check=True
                 )
 
