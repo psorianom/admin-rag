@@ -118,10 +118,13 @@ make clean-qdrant     # Remove Qdrant storage (destructive!)
 ### 🚧 Phase 2: Retrieval Foundation (In Progress)
 - **Vector Store**: Qdrant (Docker-based)
 - **Embedding Model**: BGE-M3 (1024 dims, French-optimized)
-- **Ingestion Pipeline**: Haystack 2.x with auto GPU/CPU detection
+- **Ingestion Pipelines**: Haystack 2.x with auto GPU/CPU detection
+  - `ingest_code_travail.py` - 11,644 chunks
+  - `ingest_kali.py` - 14,154 chunks from 7 conventions
 - Separate collections for explicit agent routing
+- Full automation via Makefile
 
-**Status**: Ingestion script ready, awaiting execution
+**Status**: Ingestion scripts ready, awaiting execution (pending GPU/CPU decision)
 
 ### ⏳ Phase 3: Agentic Layer (Pending)
 - Multi-step reasoning workflow
@@ -170,14 +173,16 @@ We want flexibility to experiment with chunking strategies. Their fixed-window a
 **Completed**:
 - ✅ Data parsing pipeline (11,644 + 14,154 chunks)
 - ✅ Qdrant setup and configuration
-- ✅ Ingestion pipeline with BGE-M3 embeddings
+- ✅ Ingestion pipelines for both Code du travail and KALI
 - ✅ Full automation via Makefile
+- ✅ Comprehensive documentation
 
 **Next Steps**:
-- Run Code du travail ingestion (pending model/RAM decision)
-- Build KALI ingestion script
+- Run embeddings ingestion (pending GPU/CPU decision)
+  - Option A: BGE-M3 on vast.ai GPU (~$0.10, 20 min)
+  - Option B: Smaller model on CPU (free, 30 min)
 - Implement basic retrieval pipeline
-- Test retrieval quality
+- Test retrieval quality with sample queries
 
 ## License
 

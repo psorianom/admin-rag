@@ -66,13 +66,16 @@ Basic RAG system that can retrieve relevant articles from both sources.
   - Load JSONL → Haystack Documents
   - BGE-M3 embedding generation (auto-detects GPU/CPU)
   - Qdrant indexing with rich metadata
-- [ ] **Run Code du travail ingestion**
-  - Embed and index 11,644 chunks
-  - Collection: `code_travail`
-- [ ] **Build KALI ingestion pipeline**
-  - Similar to Code du travail script
+- [x] **Build KALI ingestion pipeline**
+  - Created `src/retrieval/ingest_kali.py`
+  - Preserves KALI-specific metadata (IDCC, convention names)
+  - Embeds convention info for better retrieval
   - Collection: `kali`
-  - Embed and index 14,154 chunks
+- [ ] **Run embeddings ingestion**
+  - Code du travail: 11,644 chunks → `code_travail` collection
+  - KALI: 14,154 chunks → `kali` collection
+  - Total: 25,798 chunks with BGE-M3 embeddings
+  - Decision needed: GPU (vast.ai) vs CPU (smaller model)
 - [ ] **Build basic retrieval pipeline**
   - Query → Embedding → Retrieval
   - Top-k selection

@@ -392,8 +392,8 @@ docker run -d -p 6333:6333 -p 6334:6334 \
 - Source identifier
 
 **Collections:**
-- `code_travail`: 11,644 chunks
-- `kali`: 14,154 chunks (pending)
+- `code_travail`: 11,644 chunks (script: `ingest_code_travail.py`)
+- `kali`: 14,154 chunks (script: `ingest_kali.py`)
 
 ### 2.4 Pipeline Automation ✅
 
@@ -427,10 +427,12 @@ make status   # Check pipeline status
 ### Phase 2: Retrieval Foundation (In Progress)
 - ✅ Vector store setup (Qdrant)
 - ✅ Embedding model selection (BGE-M3)
-- ✅ Ingestion pipeline implementation
-- ⏳ Run Code du travail ingestion
-- ⏳ Build KALI ingestion pipeline
-- ⏳ Test basic retrieval with sample queries
+- ✅ Ingestion pipeline implementation (Code du travail)
+- ✅ Ingestion pipeline implementation (KALI)
+- ✅ Pipeline automation (Makefile)
+- ⏳ Run embeddings (pending GPU/CPU decision)
+- ⏳ Build basic retrieval pipeline
+- ⏳ Test retrieval quality with sample queries
 
 ### Phase 3: Agentic Layer (Pending)
 - Multi-step reasoning workflow
