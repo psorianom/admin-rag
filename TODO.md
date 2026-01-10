@@ -29,18 +29,15 @@ Clean, structured data ready for ingestion from both Code du travail and KALI co
   - Target 10 major sectors (Métallurgie, Syntec, HCR, etc.)
   - Extracted 13,033 articles from 7/10 conventions
   - Same filtering logic as Code du travail (obsolete, historical)
-- [ ] **Chunk KALI articles**
+- [x] **Chunk KALI articles**
   - Reuse article_chunker.py (same logic)
   - Run parse_kali.py script
-- [ ] **Create unified document format**
-  - Combine Code du travail chunks + KALI chunks
-  - Standardized metadata schema
-  - Single unified JSONL output
+  - Result: 14,154 chunks from 7 conventions
 
 ### Deliverable
 - `data/processed/code_travail_chunks.jsonl` - 11,644 Code du travail chunks ✅
-- `data/processed/kali_chunks.jsonl` - ~13,000 KALI chunks (pending)
-- `data/processed/unified_corpus.jsonl` - Combined corpus (~25K chunks total)
+- `data/processed/kali_chunks.jsonl` - 14,154 KALI chunks ✅
+- **Decision**: Keep datasets SEPARATE for explicit agent routing (not merged)
 
 ---
 
@@ -50,21 +47,32 @@ Clean, structured data ready for ingestion from both Code du travail and KALI co
 Basic RAG system that can retrieve relevant articles from both sources.
 
 ### Tasks
-- [ ] **Choose vector store**
-  - Evaluate: Qdrant, Weaviate, or simple FAISS
-  - Consider: scale, metadata filtering, ease of use
-- [ ] **Select embedding model**
-  - Test French-specific models (Camembert-based)
-  - Compare with multilingual models
-  - Benchmark on sample legal queries
-- [ ] **Build Haystack ingestion pipeline**
-  - Document preprocessor
-  - Embedding generation
-  - Vector store indexing
-- [ ] **Implement metadata filtering**
-  - Filter by source (code_travail vs convention)
-  - Filter by convention type (Syntec, etc.)
-  - Filter by article type (legislative vs regulatory)
+- [x] **Choose vector store**
+  - **Decision**: Qdrant
+  - Fast (Rust-based), free (open source)
+  - Excellent metadata filtering for multi-source RAG
+  - Running at http://localhost:6333
+- [x] **Select embedding model**
+  - **Decision**: BGE-M3 (BAAI/bge-m3, 1024 dims)
+  - Validated by AgentPublic/legi dataset on French legal text
+  - Multilingual with excellent French performance
+  - Sentence-transformers compatible
+- [x] **Install dependencies**
+  - qdrant-haystack (4.2.0)
+  - sentence-transformers (3.4.1)
+  - PyTorch (2.9.1) + transformers (4.57.3)
+- [x] **Build Haystack ingestion pipeline**
+  - Created `src/retrieval/ingest_code_travail.py`
+  - Load JSONL → Haystack Documents
+  - BGE-M3 embedding generation (auto-detects GPU/CPU)
+  - Qdrant indexing with rich metadata
+- [ ] **Run Code du travail ingestion**
+  - Embed and index 11,644 chunks
+  - Collection: `code_travail`
+- [ ] **Build KALI ingestion pipeline**
+  - Similar to Code du travail script
+  - Collection: `kali`
+  - Embed and index 14,154 chunks
 - [ ] **Build basic retrieval pipeline**
   - Query → Embedding → Retrieval
   - Top-k selection
@@ -156,6 +164,11 @@ Reliable system with good answer quality and proper citations.
 **Time**: Open-ended, depends on requirements
 
 ### Possible Enhancements
+- [ ] **Parse article citation links**
+  - Extract `<LIENS>` tags from XML (CITATION, MODIFIE, ABROGE types)
+  - Add cross-references to article metadata
+  - Enable following article references in RAG
+  - Potential knowledge graph construction
 - [ ] Support for multiple conventions beyond Syntec
 - [ ] Temporal queries ("what was the rule in 2020?")
 - [ ] Knowledge graph for article cross-references
@@ -195,3 +208,11 @@ Reliable system with good answer quality and proper citations.
 - More useful system covering major French sectors
 - Still manageable dataset (~13K articles vs 289K total)
 - Includes: Métallurgie, Syntec, HCR, Bâtiment, Automobile, Banking, Retail, etc.
+
+### Why not use AgentPublic/legi pre-processed dataset?
+- They have 33K Code du travail chunks (vs our 11K) due to fixed-window chunking + overlap
+- Pre-computed BGE-M3 embeddings (time saver)
+- BUT: We want flexibility to experiment with chunking strategies
+- Our semantic chunking preserves legal structure better
+- Our metadata is richer (hierarchy + section titles)
+- Decision: Use our data, adopt BGE-M3 model for compatibility

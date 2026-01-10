@@ -26,6 +26,8 @@ wheels/
 # Data
 data/raw/*
 data/processed/*
+data/*.tar.gz
+data/*.zip
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
@@ -50,9 +52,11 @@ poetry.lock
 # Vector stores
 *.index
 *.faiss
+qdrant_storage/
 
 # Logs
 *.log
 
 # Documentation (tracked)
 # FLOW.md and TODO.md are tracked in git
+CLAUDE.md

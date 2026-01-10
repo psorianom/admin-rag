@@ -261,17 +261,149 @@ poetry run python src/ingestion/parse_kali.py
 
 **Output**: `data/processed/kali_chunks.jsonl`
 
+### 1.11 KALI Chunking ✅
+
+**Results**:
+- 13,033 articles processed
+- 96.1% (12,531) kept as-is
+- 3.9% (502) chunked into multiple pieces
+- **14,154 total chunks** output
+- Saved to `data/processed/kali_chunks.jsonl`
+
+### 1.12 AgentPublic/legi Dataset Exploration ✅
+
+**Discovery**: HuggingFace dataset with pre-processed French legal corpus
+- Dataset: `AgentPublic/legi` (1.26M legal document chunks)
+- Pre-computed BGE-M3 embeddings (1024 dims)
+- Parquet format with rich metadata
+
+**Investigation results**:
+- Scanned 1.26M records to find Code du travail
+- Found **33,418 Code du travail chunks** (vs our 11,644)
+- **Ratio: 2.9x more chunks** from same source data
+
+**Their approach**:
+- Fixed-window chunking: 5000 chars per chunk
+- 250 char overlap between chunks
+- Uses LangChain chunking utilities
+- Extracts citation links (`<LIENS>` tags) as JSON
+- Includes ministry, category, nota fields
+
+**Our approach**:
+- Semantic chunking: paragraph/numbered list boundaries
+- ~500 tokens per chunk (~2000 chars)
+- No overlap (cleaner citations)
+- 99.1% of articles kept whole (only 0.9% chunked)
+- Rich metadata: hierarchy + section titles
+
+**Decision: Keep our processed data**
+
+**Reasons**:
+1. **Experimentation flexibility**: Can test different chunking strategies
+2. **Semantic chunking**: Preserves legal structure better
+3. **Richer metadata**: Hierarchy + section titles vs citations
+4. **No overlap**: Cleaner for citations/attribution
+5. **Simplicity**: Modern RAG favors simpler chunking
+
+**What we adopt from them**:
+- ✅ **BGE-M3 embedding model** (validated on French legal text)
+- 📝 Future: Parse `<LIENS>` tags for article cross-references (Phase 5)
+
+## Phase 1 Complete! ✅
+
+**Final dataset:**
+- Code du travail: **11,644 chunks**
+- KALI (7 conventions): **14,154 chunks**
+- **Total: 25,798 chunks**
+
+### Architecture Decision: Separate Collections vs Merged Corpus
+
+**Decision: Keep datasets SEPARATE for proper agent routing**
+
+**Why NOT merge:**
+- Agent needs explicit routing logic
+- Query workflow: "Check Code du travail first, then query specific convention"
+- Can compare rules side-by-side (hierarchy: convention ≥ Code du travail)
+- Better observability (which source was queried?)
+
+**Phase 2 approach:**
+- Separate vector collections:
+  - `code_travail` collection (11,644 chunks)
+  - `kali_<idcc>` collections per convention (7 collections)
+- Agent tools:
+  - `retrieve_code_travail(query)`
+  - `retrieve_convention(query, idcc)`
+  - `identify_convention(job_role, industry)`
+
+## Phase 2: Retrieval Foundation (In Progress)
+
+### 2.1 Vector Store Setup ✅
+
+**Decision: Qdrant**
+
+**Why Qdrant:**
+- Fast (Rust-based) and free (open source)
+- Excellent metadata filtering (critical for multi-source RAG)
+- Native collection support (separate code_travail/kali collections)
+- Perfect scale for 26K vectors
+- Good Haystack integration
+
+**Setup:**
+```bash
+docker run -d -p 6333:6333 -p 6334:6334 \
+  -v $(pwd)/qdrant_storage:/qdrant/storage:z \
+  --name qdrant qdrant/qdrant
+```
+
+**Running at**: `http://localhost:6333`
+**Dashboard**: `http://localhost:6333/dashboard`
+
+### 2.2 Embedding Model Selection ✅
+
+**Decision: BGE-M3** (BAAI/bge-m3)
+
+**Why BGE-M3:**
+- Validated by AgentPublic/legi on French legal text
+- Multilingual support (excellent French performance)
+- 1024 dimensions (good balance of quality/size)
+- Sentence-transformers compatible
+
+**Dependencies installed:**
+- `qdrant-haystack` (4.2.0)
+- `sentence-transformers` (3.4.1)
+- `torch` (2.9.1) + `transformers` (4.57.3)
+
+### 2.3 Ingestion Pipeline ✅
+
+**Implementation**: `src/retrieval/ingest_code_travail.py`
+
+**Pipeline architecture:**
+1. Load chunks from JSONL
+2. Convert to Haystack Documents with rich metadata
+3. Generate BGE-M3 embeddings (auto-detects GPU/CPU)
+4. Index into Qdrant collection
+
+**Metadata preserved:**
+- Article identifiers (article_id, article_num)
+- Status (etat, dates)
+- Hierarchy (partie, livre, titre, chapitre)
+- Section titles
+- Chunk information (for multi-chunk articles)
+- Source identifier
+
+**Collections:**
+- `code_travail`: 11,644 chunks
+- `kali`: 14,154 chunks (pending)
+
 ## Next Steps
 
-### 1.11 Unified Corpus (Pending)
-- Combine Code du travail chunks + KALI chunks
-- Create single unified JSONL
-- Ensure consistent metadata schema
-
-### Phase 2: Retrieval Foundation (Pending)
-- Vector store setup
-- Embedding model selection
-- Basic Haystack retrieval pipeline
+### Phase 2: Retrieval Foundation (In Progress)
+- ✅ Vector store setup (Qdrant)
+- ✅ Embedding model selection (BGE-M3)
+- ✅ Ingestion pipeline implementation
+- ⏳ Run Code du travail ingestion
+- ⏳ Build KALI ingestion pipeline
+- ⏳ Test basic retrieval with sample queries
 
 ### Phase 3: Agentic Layer (Pending)
 - Multi-step reasoning workflow
