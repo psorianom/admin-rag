@@ -20,8 +20,46 @@ import subprocess
 import json
 import time
 import sys
+import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+
+def setup_logging() -> logging.Logger:
+    """Setup logging to file and console."""
+    # Create logs directory
+    log_dir = Path(__file__).parent.parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+
+    # Log file with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"vast_ingestion_{timestamp}.log"
+
+    # Configure logging
+    logger = logging.getLogger("VastAIIngestion")
+    logger.setLevel(logging.DEBUG)
+
+    # File handler (DEBUG level - everything)
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    file_handler.setFormatter(file_formatter)
+
+    # Console handler (INFO level - important stuff)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(console_formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    logger.info(f"Logging to: {log_file}")
+
+    return logger
 
 
 class VastAIIngestion:
@@ -48,18 +86,25 @@ class VastAIIngestion:
         self.kali_jsonl = self.project_root / "data" / "processed" / "kali_chunks.jsonl"
         self.qdrant_storage = self.project_root / "qdrant_storage"
 
+        # Setup logging
+        self.logger = setup_logging()
+
     def check_prerequisites(self) -> bool:
         """Check if all prerequisites are met."""
         print("🔍 Checking prerequisites...")
+        self.logger.info("Starting prerequisite checks")
 
         # Check vast.ai CLI
         try:
             result = subprocess.run(["vastai", "--version"],
                                    capture_output=True, text=True, check=True)
-            print(f"   ✅ vast.ai CLI installed: {result.stdout.strip()}")
-        except (subprocess.CalledProcessError, FileNotFoundError):
+            version = result.stdout.strip()
+            print(f"   ✅ vast.ai CLI installed: {version}")
+            self.logger.info(f"vast.ai CLI version: {version}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
             print("   ❌ vast.ai CLI not found")
             print("      Install: pip install vastai")
+            self.logger.error(f"vast.ai CLI not found: {e}")
             return False
 
         # Check API key
@@ -67,23 +112,31 @@ class VastAIIngestion:
             subprocess.run(["vastai", "show", "user"],
                           capture_output=True, check=True)
             print("   ✅ vast.ai API key configured")
-        except subprocess.CalledProcessError:
+            self.logger.info("vast.ai API key is configured")
+        except subprocess.CalledProcessError as e:
             print("   ❌ vast.ai API key not set")
             print("      Set key: vastai set api-key YOUR_KEY")
             print("      Get key from: https://cloud.vast.ai/account/")
+            self.logger.error(f"vast.ai API key not set: {e}")
             return False
 
         # Check JSONL files
         if not self.code_travail_jsonl.exists():
             print(f"   ❌ Missing: {self.code_travail_jsonl}")
+            self.logger.error(f"Missing file: {self.code_travail_jsonl}")
             return False
         if not self.kali_jsonl.exists():
             print(f"   ❌ Missing: {self.kali_jsonl}")
+            self.logger.error(f"Missing file: {self.kali_jsonl}")
             return False
 
-        print(f"   ✅ code_travail_chunks.jsonl ({self.code_travail_jsonl.stat().st_size / 1024 / 1024:.1f}MB)")
-        print(f"   ✅ kali_chunks.jsonl ({self.kali_jsonl.stat().st_size / 1024 / 1024:.1f}MB)")
+        code_travail_size = self.code_travail_jsonl.stat().st_size / 1024 / 1024
+        kali_size = self.kali_jsonl.stat().st_size / 1024 / 1024
+        print(f"   ✅ code_travail_chunks.jsonl ({code_travail_size:.1f}MB)")
+        print(f"   ✅ kali_chunks.jsonl ({kali_size:.1f}MB)")
+        self.logger.info(f"JSONL files found: code_travail={code_travail_size:.1f}MB, kali={kali_size:.1f}MB")
 
+        self.logger.info("All prerequisites met")
         return True
 
     def search_instances(self) -> Optional[int]:
@@ -106,6 +159,8 @@ class VastAIIngestion:
             f"inet_up >= {self.min_upload_speed}"
         )
 
+        self.logger.info(f"Searching instances with query: {query}")
+
         try:
             result = subprocess.run(
                 ["vastai", "search", "offers", query,
@@ -118,7 +173,10 @@ class VastAIIngestion:
             if not offers:
                 print("   ❌ No instances found matching criteria")
                 print(f"      Try increasing max_price (current: ${self.max_price}/hr)")
+                self.logger.warning(f"No instances found with criteria: max_price=${self.max_price}/hr")
                 return None
+
+            self.logger.info(f"Found {len(offers)} matching instances")
 
             # Show top 3 options
             print(f"\n   Found {len(offers)} instances. Top 3:")
@@ -128,26 +186,34 @@ class VastAIIngestion:
                       f"{offer['gpu_ram']/1024:.0f}GB VRAM | "
                       f"↓{offer.get('inet_down', 0):.0f}Mbps ↑{offer.get('inet_up', 0):.0f}Mbps | "
                       f"Reliability: {offer.get('reliability2', 0):.1%}")
+                self.logger.debug(f"Option {i}: {offer}")
 
             # Select cheapest
             best_offer = offers[0]
             print(f"\n   ✅ Selected: {best_offer['gpu_name']} @ ${best_offer['dph_total']:.3f}/hr")
+            self.logger.info(f"Selected instance {best_offer['id']}: {best_offer['gpu_name']}, "
+                           f"${best_offer['dph_total']:.3f}/hr, "
+                           f"↓{best_offer.get('inet_down', 0):.0f}Mbps ↑{best_offer.get('inet_up', 0):.0f}Mbps")
 
             return best_offer['id']
 
         except subprocess.CalledProcessError as e:
             print(f"   ❌ Search failed: {e.stderr}")
+            self.logger.error(f"Instance search failed: {e.stderr}")
             return None
         except json.JSONDecodeError as e:
             print(f"   ❌ Failed to parse results: {e}")
+            self.logger.error(f"Failed to parse search results: {e}")
             return None
 
     def create_instance(self, offer_id: int) -> bool:
         """Create instance from offer."""
         print(f"\n🚀 Creating instance...")
+        self.logger.info(f"Creating instance from offer {offer_id}")
 
         # Use PyTorch image with all dependencies
         image = "pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime"
+        self.logger.debug(f"Using Docker image: {image}")
 
         try:
             result = subprocess.run(
@@ -163,18 +229,22 @@ class VastAIIngestion:
 
             if not self.instance_id:
                 print(f"   ❌ Failed to create instance: {response}")
+                self.logger.error(f"Instance creation failed: {response}")
                 return False
 
             print(f"   ✅ Instance created: ID {self.instance_id}")
+            self.logger.info(f"Instance created successfully: ID {self.instance_id}")
             return True
 
         except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
             print(f"   ❌ Creation failed: {e}")
+            self.logger.error(f"Instance creation failed: {e}")
             return False
 
     def wait_for_instance(self, timeout: int = 300) -> bool:
         """Wait for instance to be ready."""
         print(f"\n⏳ Waiting for instance to be ready (timeout: {timeout}s)...")
+        self.logger.info(f"Waiting for instance {self.instance_id} to be ready (timeout: {timeout}s)")
 
         start_time = time.time()
 
@@ -189,6 +259,8 @@ class VastAIIngestion:
                 status = instance.get('actual_status', 'unknown')
 
                 print(f"   Status: {status}", end='\r')
+                elapsed = int(time.time() - start_time)
+                self.logger.debug(f"Instance status: {status} (elapsed: {elapsed}s)")
 
                 if status == 'running':
                     # Get SSH details
@@ -197,33 +269,39 @@ class VastAIIngestion:
 
                     if self.ssh_host and self.ssh_port:
                         print(f"\n   ✅ Instance running: {self.ssh_host}:{self.ssh_port}")
+                        self.logger.info(f"Instance running: {self.ssh_host}:{self.ssh_port}")
                         return True
 
                 time.sleep(5)
 
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
                 print(f"\n   ❌ Status check failed: {e}")
+                self.logger.warning(f"Status check failed: {e}")
                 time.sleep(5)
                 continue
 
         print(f"\n   ❌ Timeout waiting for instance")
+        self.logger.error(f"Timeout waiting for instance after {timeout}s")
         return False
 
     def upload_files(self) -> bool:
         """Upload JSONL files to instance."""
         print(f"\n📤 Uploading JSONL files...")
+        self.logger.info(f"Starting file uploads to {self.ssh_host}:{self.ssh_port}")
 
         ssh_target = f"root@{self.ssh_host}"
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
         # Create remote directory
         try:
+            self.logger.debug("Creating remote directory /workspace/data/processed")
             subprocess.run(
                 f"ssh {ssh_opts} {ssh_target} 'mkdir -p /workspace/data/processed'",
                 shell=True, check=True, capture_output=True
             )
         except subprocess.CalledProcessError as e:
             print(f"   ❌ Failed to create directory: {e.stderr.decode()}")
+            self.logger.error(f"Failed to create remote directory: {e.stderr.decode()}")
             return False
 
         # Upload files
@@ -234,21 +312,31 @@ class VastAIIngestion:
 
         for local_path, filename in files:
             print(f"   Uploading {filename}...")
+            size_mb = local_path.stat().st_size / 1024 / 1024
+            self.logger.info(f"Uploading {filename} ({size_mb:.1f}MB)")
+
+            start_time = time.time()
             try:
                 subprocess.run(
                     f"scp {ssh_opts} {local_path} {ssh_target}:/workspace/data/processed/",
                     shell=True, check=True, capture_output=True
                 )
-                print(f"   ✅ {filename} uploaded")
+                elapsed = time.time() - start_time
+                speed_mbps = (size_mb * 8) / elapsed if elapsed > 0 else 0
+                print(f"   ✅ {filename} uploaded ({elapsed:.1f}s, ~{speed_mbps:.0f} Mbps)")
+                self.logger.info(f"{filename} uploaded: {elapsed:.1f}s, ~{speed_mbps:.0f} Mbps")
             except subprocess.CalledProcessError as e:
                 print(f"   ❌ Upload failed: {e.stderr.decode()}")
+                self.logger.error(f"Upload failed for {filename}: {e.stderr.decode()}")
                 return False
 
+        self.logger.info("All files uploaded successfully")
         return True
 
     def run_ingestion(self) -> bool:
         """Run ingestion on remote instance."""
         print(f"\n🔮 Running ingestion on vast.ai instance...")
+        self.logger.info("Starting remote ingestion process")
 
         ssh_target = f"root@{self.ssh_host}"
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -277,23 +365,32 @@ class VastAIIngestion:
         ]
 
         full_command = " && ".join(commands)
+        self.logger.debug(f"Remote command: {full_command}")
 
         try:
             print("   This will take ~15-20 minutes (downloading model + embedding)...")
+            self.logger.info("Running ingestion (this will take 15-20 minutes)")
+
+            start_time = time.time()
             result = subprocess.run(
                 f"ssh {ssh_opts} {ssh_target} '{full_command}'",
                 shell=True, check=True, text=True, capture_output=False  # Show output
             )
+            elapsed = time.time() - start_time
+
             print(f"\n   ✅ Ingestion completed successfully")
+            self.logger.info(f"Ingestion completed successfully in {elapsed/60:.1f} minutes")
             return True
 
         except subprocess.CalledProcessError as e:
             print(f"\n   ❌ Ingestion failed")
+            self.logger.error(f"Ingestion failed: {e}")
             return False
 
     def download_results(self) -> bool:
         """Download Qdrant storage from instance."""
         print(f"\n📥 Downloading Qdrant storage...")
+        self.logger.info(f"Downloading Qdrant storage to {self.qdrant_storage}")
 
         ssh_target = f"root@{self.ssh_host}"
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -302,15 +399,20 @@ class VastAIIngestion:
         self.qdrant_storage.mkdir(exist_ok=True)
 
         try:
+            start_time = time.time()
             subprocess.run(
                 f"scp -r {ssh_opts} {ssh_target}:/workspace/admin-rag/qdrant_storage/* {self.qdrant_storage}/",
                 shell=True, check=True
             )
+            elapsed = time.time() - start_time
+
             print(f"   ✅ Downloaded to {self.qdrant_storage}")
+            self.logger.info(f"Qdrant storage downloaded successfully in {elapsed:.1f}s")
             return True
 
         except subprocess.CalledProcessError as e:
             print(f"   ❌ Download failed: {e}")
+            self.logger.error(f"Download failed: {e}")
             return False
 
     def destroy_instance(self) -> bool:
@@ -319,6 +421,7 @@ class VastAIIngestion:
             return True
 
         print(f"\n🗑️  Destroying instance {self.instance_id}...")
+        self.logger.info(f"Destroying instance {self.instance_id}")
 
         try:
             subprocess.run(
@@ -326,10 +429,12 @@ class VastAIIngestion:
                 check=True, capture_output=True
             )
             print(f"   ✅ Instance destroyed")
+            self.logger.info(f"Instance {self.instance_id} destroyed successfully")
             return True
 
         except subprocess.CalledProcessError as e:
             print(f"   ❌ Destruction failed: {e.stderr.decode()}")
+            self.logger.error(f"Instance destruction failed: {e.stderr.decode()}")
             return False
 
     def run(self) -> bool:
@@ -337,6 +442,10 @@ class VastAIIngestion:
         print("="*80)
         print("Vast.ai Automated Ingestion")
         print("="*80)
+
+        self.logger.info("="*60)
+        self.logger.info("Starting Vast.ai Automated Ingestion")
+        self.logger.info("="*60)
 
         try:
             # Prerequisites
@@ -384,16 +493,22 @@ class VastAIIngestion:
             print(f"  # Qdrant will load from {self.qdrant_storage}")
             print(f"\nDashboard: http://localhost:6333/dashboard")
 
+            self.logger.info("="*60)
+            self.logger.info("Ingestion workflow completed successfully!")
+            self.logger.info("="*60)
+
             return True
 
         except KeyboardInterrupt:
             print("\n\n⚠️  Interrupted by user")
+            self.logger.warning("Workflow interrupted by user")
             if self.instance_id:
                 print("Cleaning up...")
                 self.destroy_instance()
             return False
         except Exception as e:
             print(f"\n❌ Unexpected error: {e}")
+            self.logger.exception(f"Unexpected error: {e}")
             if self.instance_id:
                 print("Cleaning up...")
                 self.destroy_instance()

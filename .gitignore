@@ -56,6 +56,7 @@ qdrant_storage/
 
 # Logs
 *.log
+logs/
 
 # Documentation (tracked)
 # FLOW.md and TODO.md are tracked in git
