@@ -17,6 +17,7 @@ pydantic = "^2.0.0"
 # Vector store and embeddings
 qdrant-haystack = "^9.5.0"
 sentence-transformers = "^3.0.0"
+tqdm = "^4.66.0"
 
 # Optional dependencies - uncomment as needed
 # weaviate-haystack = "^1.0.0"

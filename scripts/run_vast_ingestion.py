@@ -1,11 +1,11 @@
 """
-Automate BGE-M3 embedding ingestion on vast.ai GPU instance.
+Automate BGE-M3 embedding generation on vast.ai GPU instance.
 
 This script:
 1. Provisions a vast.ai GPU instance
 2. Uploads JSONL files (40MB)
-3. Clones GitHub repo and runs make ingest-only
-4. Downloads Qdrant storage back to local machine
+3. Generates BGE-M3 embeddings on GPU
+4. Downloads embedded JSONL files back to local machine (gzipped)
 5. Destroys instance
 
 Requirements:
@@ -14,6 +14,10 @@ Requirements:
 - GitHub repo must be public (for cloning)
 
 Cost: ~$0.10-0.20 total
+
+After download:
+1. Decompress: gunzip data/processed/*.jsonl.gz
+2. Index locally: make ingest-only
 """
 
 import subprocess
@@ -84,7 +88,6 @@ class VastAIIngestion:
         self.project_root = Path(__file__).parent.parent
         self.code_travail_jsonl = self.project_root / "data" / "processed" / "code_travail_chunks.jsonl"
         self.kali_jsonl = self.project_root / "data" / "processed" / "kali_chunks.jsonl"
-        self.qdrant_storage = self.project_root / "qdrant_storage"
 
         # Setup logging
         self.logger = setup_logging()
@@ -335,16 +338,16 @@ class VastAIIngestion:
         return True
 
     def run_ingestion(self) -> bool:
-        """Run ingestion on remote instance."""
-        print(f"\n🔮 Running ingestion on vast.ai instance...")
-        self.logger.info("Starting remote ingestion process")
+        """Run embedding generation on remote instance."""
+        print(f"\n🔮 Generating embeddings on vast.ai instance...")
+        self.logger.info("Starting remote embedding generation")
 
         ssh_target = f"root@{self.ssh_host}"
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
         commands = [
-            # Install system dependencies
-            "apt-get update -qq && apt-get install -y -qq git curl make docker.io",
+            # Install system dependencies (no Docker needed)
+            "apt-get update -qq && apt-get install -y -qq git curl gzip",
 
             # Install Poetry
             "curl -sSL https://install.python-poetry.org | python3 -",
@@ -357,12 +360,13 @@ class VastAIIngestion:
             # Copy JSONL files to repo
             "cp /workspace/data/processed/*.jsonl ./data/processed/",
 
-            # Run ingestion
+            # Install dependencies and run embedding
             "/root/.local/bin/poetry install",
-            "make start-qdrant",
-            "sleep 5",  # Wait for Qdrant to start
-            "/root/.local/bin/poetry run python src/retrieval/ingest_code_travail.py",
-            "/root/.local/bin/poetry run python src/retrieval/ingest_kali.py",
+            "/root/.local/bin/poetry run python scripts/embed_chunks.py",
+
+            # Compress output files
+            "gzip data/processed/code_travail_chunks.jsonl",
+            "gzip data/processed/kali_chunks.jsonl",
         ]
 
         full_command = " && ".join(commands)
@@ -370,7 +374,7 @@ class VastAIIngestion:
 
         try:
             print("   This will take ~15-20 minutes (downloading model + embedding)...")
-            self.logger.info("Running ingestion (this will take 15-20 minutes)")
+            self.logger.info("Running embedding generation (this will take 15-20 minutes)")
 
             start_time = time.time()
             result = subprocess.run(
@@ -379,36 +383,56 @@ class VastAIIngestion:
             )
             elapsed = time.time() - start_time
 
-            print(f"\n   ✅ Ingestion completed successfully")
-            self.logger.info(f"Ingestion completed successfully in {elapsed/60:.1f} minutes")
+            print(f"\n   ✅ Embedding generation completed successfully")
+            self.logger.info(f"Embedding generation completed successfully in {elapsed/60:.1f} minutes")
             return True
 
         except subprocess.CalledProcessError as e:
-            print(f"\n   ❌ Ingestion failed")
-            self.logger.error(f"Ingestion failed: {e}")
+            print(f"\n   ❌ Embedding generation failed")
+            self.logger.error(f"Embedding generation failed: {e}")
             return False
 
     def download_results(self) -> bool:
-        """Download Qdrant storage from instance."""
-        print(f"\n📥 Downloading Qdrant storage...")
-        self.logger.info(f"Downloading Qdrant storage to {self.qdrant_storage}")
+        """Download embedded JSONL files from instance."""
+        print(f"\n📥 Downloading embedded JSONL files...")
+        self.logger.info(f"Downloading embedded JSONL files")
 
         ssh_target = f"root@{self.ssh_host}"
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-        # Create local directory
-        self.qdrant_storage.mkdir(exist_ok=True)
+        # Download directory
+        download_dir = self.project_root / "data" / "processed"
+        download_dir.mkdir(exist_ok=True, parents=True)
+
+        files_to_download = [
+            "code_travail_chunks.jsonl.gz",
+            "kali_chunks.jsonl.gz"
+        ]
 
         try:
-            start_time = time.time()
-            subprocess.run(
-                f"scp -r {ssh_opts} {ssh_target}:/workspace/admin-rag/qdrant_storage/* {self.qdrant_storage}/",
-                shell=True, check=True
-            )
-            elapsed = time.time() - start_time
+            for filename in files_to_download:
+                print(f"   Downloading {filename}...")
+                start_time = time.time()
 
-            print(f"   ✅ Downloaded to {self.qdrant_storage}")
-            self.logger.info(f"Qdrant storage downloaded successfully in {elapsed:.1f}s")
+                subprocess.run(
+                    f"scp {ssh_opts} {ssh_target}:/workspace/admin-rag/data/processed/{filename} {download_dir}/",
+                    shell=True, check=True
+                )
+
+                elapsed = time.time() - start_time
+                # Get file size for speed calculation
+                local_file = download_dir / filename
+                size_mb = local_file.stat().st_size / 1024 / 1024
+                speed_mbps = (size_mb * 8) / elapsed if elapsed > 0 else 0
+
+                print(f"   ✅ {filename} downloaded ({size_mb:.1f}MB, {elapsed:.1f}s, ~{speed_mbps:.0f} Mbps)")
+                self.logger.info(f"{filename} downloaded: {size_mb:.1f}MB, {elapsed:.1f}s, ~{speed_mbps:.0f} Mbps")
+
+            print(f"\n   📦 Files saved to: {download_dir}/")
+            print(f"   Next steps:")
+            print(f"     1. Decompress: gunzip {download_dir}/*.jsonl.gz")
+            print(f"     2. Index locally: make ingest-only")
+            self.logger.info("All files downloaded successfully")
             return True
 
         except subprocess.CalledProcessError as e:
