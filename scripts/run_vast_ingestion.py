@@ -366,7 +366,8 @@ class VastAIIngestion:
         ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
         commands = [
-            # Install Python dependencies directly (no Poetry needed)
+            # Upgrade PyTorch and install dependencies (fix compatibility)
+            "pip install -q --upgrade torch torchvision torchaudio",
             "pip install -q sentence-transformers tqdm",
 
             # Run embedding script
