@@ -31,6 +31,7 @@ jupyter = "^1.0.0"
 ipykernel = "^6.0.0"
 black = "^24.0.0"
 ruff = "^0.1.0"
+vastai = "^0.2.0"  # For automated vast.ai GPU provisioning
 
 [build-system]
 requires = ["poetry-core"]

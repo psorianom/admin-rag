@@ -194,11 +194,35 @@ We want flexibility to experiment with chunking strategies. Their fixed-window a
 - ✅ Comprehensive documentation
 
 **Next Steps**:
-- Run embeddings ingestion (pending GPU/CPU decision)
-  - Option A: BGE-M3 on vast.ai GPU (~$0.10, 20 min)
-  - Option B: Smaller model on CPU (free, 30 min)
+- Run embeddings ingestion
+  - **Automated**: `poetry run python scripts/run_vast_ingestion.py` (vast.ai, ~$0.10, 20 min)
+  - **Manual**: `make ingest-only` (requires 12GB+ GPU VRAM or use smaller model)
 - Implement basic retrieval pipeline
 - Test retrieval quality with sample queries
+
+### Running Ingestion on vast.ai (Automated)
+
+If you don't have a GPU or insufficient VRAM:
+
+```bash
+# 1. Setup vast.ai CLI
+pip install vastai
+vastai set api-key YOUR_KEY  # Get from https://cloud.vast.ai/account/
+
+# 2. Run automated ingestion
+poetry run python scripts/run_vast_ingestion.py
+```
+
+The script automatically:
+- Finds cheapest GPU (≥12GB VRAM, <$0.25/hr)
+- Uploads JSONL files (40MB)
+- Runs ingestion with BGE-M3
+- Downloads Qdrant storage back
+- Destroys instance
+
+**Cost**: ~$0.10-0.20 total
+
+See `scripts/README.md` for details.
 
 ## License
 
