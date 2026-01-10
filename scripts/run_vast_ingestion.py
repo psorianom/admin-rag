@@ -73,12 +73,14 @@ class VastAIIngestion:
                  min_gpu_ram: int = 12,    # Minimum GPU RAM in GB
                  disk_size: int = 30,      # GB
                  min_download_speed: int = 100,  # Mbps (for downloading BGE-M3 model)
-                 min_upload_speed: int = 50):    # Mbps (for uploading results)
+                 min_upload_speed: int = 50,     # Mbps (for uploading results)
+                 keep_alive: bool = False):      # Keep instance running after completion
         self.max_price = max_price
         self.min_gpu_ram = min_gpu_ram
         self.disk_size = disk_size
         self.min_download_speed = min_download_speed
         self.min_upload_speed = min_upload_speed
+        self.keep_alive = keep_alive
         self.instance_id: Optional[int] = None
         self.ssh_host: Optional[str] = None
         self.ssh_port: Optional[int] = None
@@ -497,36 +499,49 @@ class VastAIIngestion:
 
             # Wait for ready
             if not self.wait_for_instance():
-                self.destroy_instance()
+                if not self.keep_alive:
+                    self.destroy_instance()
                 return False
 
             # Upload files
             if not self.upload_files():
-                self.destroy_instance()
+                if not self.keep_alive:
+                    self.destroy_instance()
                 return False
 
             # Run ingestion
             if not self.run_ingestion():
-                self.destroy_instance()
+                if not self.keep_alive:
+                    self.destroy_instance()
                 return False
 
             # Download results
             if not self.download_results():
-                self.destroy_instance()
+                if not self.keep_alive:
+                    self.destroy_instance()
                 return False
 
             # Cleanup
-            self.destroy_instance()
+            if self.keep_alive:
+                print("\n" + "="*80)
+                print("⚠️  Instance kept alive for testing")
+                print("="*80)
+                print(f"Instance ID: {self.instance_id}")
+                print(f"SSH: ssh -p {self.ssh_port} root@{self.ssh_host}")
+                print(f"\n⚠️  REMEMBER TO DESTROY MANUALLY:")
+                print(f"  vastai destroy instance {self.instance_id}")
+                self.logger.warning(f"Instance {self.instance_id} kept alive - destroy manually!")
+            else:
+                self.destroy_instance()
 
             # Success!
             print("\n" + "="*80)
             print("✅ SUCCESS!")
             print("="*80)
-            print(f"Qdrant storage downloaded to: {self.qdrant_storage}")
-            print(f"\nTo use locally:")
-            print(f"  make start-qdrant")
-            print(f"  # Qdrant will load from {self.qdrant_storage}")
-            print(f"\nDashboard: http://localhost:6333/dashboard")
+            print(f"Files downloaded to: data/processed/*.jsonl.gz")
+            print(f"\nNext steps:")
+            print(f"  1. Decompress: gunzip data/processed/*.jsonl.gz")
+            print(f"  2. Index locally: make ingest-only")
 
             self.logger.info("="*60)
             self.logger.info("Ingestion workflow completed successfully!")
@@ -537,16 +552,22 @@ class VastAIIngestion:
         except KeyboardInterrupt:
             print("\n\n⚠️  Interrupted by user")
             self.logger.warning("Workflow interrupted by user")
-            if self.instance_id:
+            if self.instance_id and not self.keep_alive:
                 print("Cleaning up...")
                 self.destroy_instance()
+            elif self.instance_id and self.keep_alive:
+                print(f"\n⚠️  Instance {self.instance_id} kept alive")
+                print(f"Destroy manually: vastai destroy instance {self.instance_id}")
             return False
         except Exception as e:
             print(f"\n❌ Unexpected error: {e}")
             self.logger.exception(f"Unexpected error: {e}")
-            if self.instance_id:
+            if self.instance_id and not self.keep_alive:
                 print("Cleaning up...")
                 self.destroy_instance()
+            elif self.instance_id and self.keep_alive:
+                print(f"\n⚠️  Instance {self.instance_id} kept alive")
+                print(f"Destroy manually: vastai destroy instance {self.instance_id}")
             return False
 
 
@@ -557,7 +578,8 @@ def main():
         min_gpu_ram=12,           # Minimum 12GB VRAM for BGE-M3
         disk_size=30,             # GB
         min_download_speed=100,   # Mbps (for downloading BGE-M3 model ~2GB)
-        min_upload_speed=50       # Mbps (for uploading Qdrant storage ~200MB)
+        min_upload_speed=50,      # Mbps (for uploading results ~50-70MB)
+        keep_alive=True           # Keep instance running for testing (destroy manually)
     )
 
     success = ingestion.run()
