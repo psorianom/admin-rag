@@ -30,10 +30,14 @@ class VastAIIngestion:
     def __init__(self,
                  max_price: float = 0.20,  # Max $/hour
                  min_gpu_ram: int = 12,    # Minimum GPU RAM in GB
-                 disk_size: int = 30):     # GB
+                 disk_size: int = 30,      # GB
+                 min_download_speed: int = 100,  # Mbps (for downloading BGE-M3 model)
+                 min_upload_speed: int = 50):    # Mbps (for uploading results)
         self.max_price = max_price
         self.min_gpu_ram = min_gpu_ram
         self.disk_size = disk_size
+        self.min_download_speed = min_download_speed
+        self.min_upload_speed = min_upload_speed
         self.instance_id: Optional[int] = None
         self.ssh_host: Optional[str] = None
         self.ssh_port: Optional[int] = None
@@ -85,7 +89,11 @@ class VastAIIngestion:
     def search_instances(self) -> Optional[int]:
         """Search for available GPU instances."""
         print(f"\n🔎 Searching for GPU instances...")
-        print(f"   Filters: GPU RAM >= {self.min_gpu_ram}GB, Price <= ${self.max_price}/hr")
+        print(f"   Filters:")
+        print(f"     - GPU RAM >= {self.min_gpu_ram}GB")
+        print(f"     - Price <= ${self.max_price}/hr")
+        print(f"     - Download >= {self.min_download_speed} Mbps")
+        print(f"     - Upload >= {self.min_upload_speed} Mbps")
 
         # Search query
         query = (
@@ -93,7 +101,9 @@ class VastAIIngestion:
             f"reliability > 0.95 "
             f"num_gpus=1 "
             f"dph_total <= {self.max_price} "
-            f"cuda_max_good >= 12.0"
+            f"cuda_max_good >= 12.0 "
+            f"inet_down >= {self.min_download_speed} "
+            f"inet_up >= {self.min_upload_speed}"
         )
 
         try:
@@ -116,6 +126,7 @@ class VastAIIngestion:
                 print(f"   {i}. ${offer['dph_total']:.3f}/hr | "
                       f"{offer['gpu_name']} | "
                       f"{offer['gpu_ram']/1024:.0f}GB VRAM | "
+                      f"↓{offer.get('inet_down', 0):.0f}Mbps ↑{offer.get('inet_up', 0):.0f}Mbps | "
                       f"Reliability: {offer.get('reliability2', 0):.1%}")
 
             # Select cheapest
@@ -392,9 +403,11 @@ class VastAIIngestion:
 def main():
     """Main entry point."""
     ingestion = VastAIIngestion(
-        max_price=0.25,      # Max $/hour
-        min_gpu_ram=12,      # Minimum 12GB VRAM for BGE-M3
-        disk_size=30         # GB
+        max_price=0.25,           # Max $/hour
+        min_gpu_ram=12,           # Minimum 12GB VRAM for BGE-M3
+        disk_size=30,             # GB
+        min_download_speed=100,   # Mbps (for downloading BGE-M3 model ~2GB)
+        min_upload_speed=50       # Mbps (for uploading Qdrant storage ~200MB)
     )
 
     success = ingestion.run()

@@ -53,9 +53,11 @@ make start-qdrant
 Edit `main()` in the script to adjust:
 ```python
 VastAIIngestion(
-    max_price=0.25,      # Max $/hour (increase if no instances found)
-    min_gpu_ram=12,      # Minimum GPU RAM in GB
-    disk_size=30         # Instance disk size in GB
+    max_price=0.25,           # Max $/hour (increase if no instances found)
+    min_gpu_ram=12,           # Minimum GPU RAM in GB
+    disk_size=30,             # Instance disk size in GB
+    min_download_speed=100,   # Mbps (for downloading BGE-M3 model)
+    min_upload_speed=50       # Mbps (for uploading results)
 )
 ```
 
