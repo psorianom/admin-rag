@@ -395,6 +395,33 @@ docker run -d -p 6333:6333 -p 6334:6334 \
 - `code_travail`: 11,644 chunks
 - `kali`: 14,154 chunks (pending)
 
+### 2.4 Pipeline Automation ✅
+
+**Implementation**: `Makefile`
+
+**Purpose**: Simplify reproduction and deployment
+
+**Why Makefile (not Airflow/Prefect)?**
+- Pipeline runs once or infrequently (not scheduled)
+- Linear dependencies (no complex DAG)
+- Small scale (26K documents)
+- No need for orchestration overhead
+
+**Key targets:**
+```bash
+make all      # Full pipeline: setup → parse → ingest
+make setup    # Install deps + start Qdrant
+make parse    # Phase 1: XML → JSONL
+make ingest   # Phase 2: Embed → Qdrant
+make status   # Check pipeline status
+```
+
+**Benefits:**
+- One-command reproduction on new machines
+- Clear documentation of dependencies
+- Built-in error checking (data presence, Qdrant status)
+- Clean separation of phases
+
 ## Next Steps
 
 ### Phase 2: Retrieval Foundation (In Progress)
