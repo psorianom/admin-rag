@@ -245,11 +245,12 @@ class VastAIIngestion:
             return False
 
     def wait_for_instance(self, timeout: int = 300) -> bool:
-        """Wait for instance to be ready."""
+        """Wait for instance to be ready and SSH to be available."""
         print(f"\n⏳ Waiting for instance to be ready (timeout: {timeout}s)...")
         self.logger.info(f"Waiting for instance {self.instance_id} to be ready (timeout: {timeout}s)")
 
         start_time = time.time()
+        ssh_ready = False
 
         while time.time() - start_time < timeout:
             try:
@@ -265,16 +266,32 @@ class VastAIIngestion:
                 elapsed = int(time.time() - start_time)
                 self.logger.debug(f"Instance status: {status} (elapsed: {elapsed}s)")
 
-                if status == 'running':
+                if status == 'running' and not ssh_ready:
                     # Get SSH details - vast.ai uses SSH gateway
                     self.ssh_host = instance.get('ssh_host', 'ssh2.vast.ai')  # Gateway host
                     self.ssh_port = instance.get('ssh_port')  # Port on gateway
 
                     if self.ssh_host and self.ssh_port:
-                        print(f"\n   ✅ Instance running: {self.ssh_host}:{self.ssh_port}")
-                        self.logger.info(f"Instance running: {self.ssh_host}:{self.ssh_port} (via gateway)")
-                        self.logger.debug(f"Full instance details: {instance}")
-                        return True
+                        print(f"\n   Instance running: {self.ssh_host}:{self.ssh_port}")
+                        print(f"   Testing SSH connectivity...")
+                        self.logger.info(f"Instance running, testing SSH: {self.ssh_host}:{self.ssh_port}")
+
+                        # Test SSH connectivity
+                        ssh_target = f"root@{self.ssh_host}"
+                        ssh_opts = f"-p {self.ssh_port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+
+                        try:
+                            subprocess.run(
+                                f"ssh {ssh_opts} {ssh_target} 'echo SSH_OK'",
+                                shell=True, check=True, capture_output=True, timeout=15
+                            )
+                            print(f"   ✅ SSH ready!")
+                            self.logger.info(f"SSH connectivity confirmed: {self.ssh_host}:{self.ssh_port}")
+                            return True
+                        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as ssh_error:
+                            print(f"   SSH not ready yet, waiting...", end='\r')
+                            self.logger.debug(f"SSH test failed (will retry): {ssh_error}")
+                            ssh_ready = False
 
                 time.sleep(5)
 
