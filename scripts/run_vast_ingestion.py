@@ -263,13 +263,14 @@ class VastAIIngestion:
                 self.logger.debug(f"Instance status: {status} (elapsed: {elapsed}s)")
 
                 if status == 'running':
-                    # Get SSH details
-                    self.ssh_host = instance.get('public_ipaddr')
-                    self.ssh_port = instance.get('ssh_port')
+                    # Get SSH details - vast.ai uses SSH gateway
+                    self.ssh_host = instance.get('ssh_host', 'ssh2.vast.ai')  # Gateway host
+                    self.ssh_port = instance.get('ssh_port')  # Port on gateway
 
                     if self.ssh_host and self.ssh_port:
                         print(f"\n   ✅ Instance running: {self.ssh_host}:{self.ssh_port}")
-                        self.logger.info(f"Instance running: {self.ssh_host}:{self.ssh_port}")
+                        self.logger.info(f"Instance running: {self.ssh_host}:{self.ssh_port} (via gateway)")
+                        self.logger.debug(f"Full instance details: {instance}")
                         return True
 
                 time.sleep(5)
