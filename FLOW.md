@@ -422,6 +422,12 @@ make status   # Check pipeline status
 - Built-in error checking (data presence, Qdrant status)
 - Clean separation of phases
 
+**Key target: `make ingest-only`**
+- Ingests from existing JSONL files (skips parsing)
+- No raw XML data needed (only 40MB JSONL vs 10GB XML)
+- Perfect for cloud GPU instances or moving between machines
+- Enables testing different embedding models without re-parsing
+
 ## Next Steps
 
 ### Phase 2: Retrieval Foundation (In Progress)

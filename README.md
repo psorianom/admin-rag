@@ -81,8 +81,24 @@ make all              # Run full pipeline (setup → parse → ingest)
 make setup            # Install dependencies + start Qdrant
 make parse            # Parse Code du travail + KALI (Phase 1)
 make ingest           # Embed and index into Qdrant (Phase 2)
+make ingest-only      # Ingest from existing JSONL files (skip parsing)
 make status           # Check pipeline status
 ```
+
+**If you already have parsed JSONL files (no raw data needed):**
+```bash
+# Place files in data/processed/:
+#   - code_travail_chunks.jsonl (16MB)
+#   - kali_chunks.jsonl (24MB)
+
+make setup           # Install deps + start Qdrant
+make ingest-only     # Embed and index (skips parsing)
+```
+
+This is ideal for:
+- Moving between machines (40MB vs 10GB raw data)
+- Cloud GPU instances (vast.ai) - just upload JSONL files
+- Sharing with collaborators
 
 ### Individual Steps
 

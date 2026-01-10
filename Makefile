@@ -1,4 +1,4 @@
-.PHONY: help setup install-deps start-qdrant stop-qdrant parse-code-travail parse-kali parse ingest-code-travail ingest-kali ingest all clean clean-qdrant clean-processed status
+.PHONY: help setup install-deps start-qdrant stop-qdrant parse-code-travail parse-kali parse ingest-code-travail ingest-kali ingest ingest-only all clean clean-qdrant clean-processed status
 
 # Default target
 help:
@@ -8,6 +8,7 @@ help:
 	@echo "  make setup              - Install dependencies + start Qdrant"
 	@echo "  make parse              - Parse Code du travail + KALI (Phase 1)"
 	@echo "  make ingest             - Embed and index into Qdrant (Phase 2)"
+	@echo "  make ingest-only        - Ingest from existing JSONL files (skip parsing)"
 	@echo "  make all                - Run full pipeline (parse + ingest)"
 	@echo ""
 	@echo "Individual targets:"
@@ -102,6 +103,28 @@ ingest-kali:
 	fi
 	poetry run python src/retrieval/ingest_kali.py
 	@echo "   ✅ KALI conventions ingested → Qdrant collection 'kali'"
+
+# Ingest from existing JSONL files (skip parsing)
+ingest-only: start-qdrant
+	@echo "📦 Ingesting from existing JSONL files..."
+	@echo ""
+	@if [ ! -f "data/processed/code_travail_chunks.jsonl" ] || [ ! -f "data/processed/kali_chunks.jsonl" ]; then \
+		echo "❌ Error: JSONL files not found"; \
+		echo "   Expected:"; \
+		echo "     - data/processed/code_travail_chunks.jsonl"; \
+		echo "     - data/processed/kali_chunks.jsonl"; \
+		echo ""; \
+		echo "   If you have these files, place them in data/processed/"; \
+		echo "   Otherwise, run 'make parse' first"; \
+		exit 1; \
+	fi
+	@echo "✅ Found both JSONL files"
+	@echo "   - code_travail_chunks.jsonl ($$(wc -l < data/processed/code_travail_chunks.jsonl) chunks)"
+	@echo "   - kali_chunks.jsonl ($$(wc -l < data/processed/kali_chunks.jsonl) chunks)"
+	@echo ""
+	@make ingest
+	@echo ""
+	@echo "🎉 Ingestion complete!"
 
 # Full pipeline
 all: setup parse ingest
