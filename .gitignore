@@ -59,5 +59,4 @@ qdrant_storage/
 logs/
 
 # Documentation (tracked)
-# FLOW.md and TODO.md are tracked in git
-CLAUDE.md
+# FLOW.md, TODO.md, and CLAUDE.md are tracked in git
