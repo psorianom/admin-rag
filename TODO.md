@@ -71,11 +71,32 @@ Basic RAG system that can retrieve relevant articles from both sources.
   - Preserves KALI-specific metadata (IDCC, convention names)
   - Embeds convention info for better retrieval
   - Collection: `kali`
-- [ ] **Run embeddings ingestion**
-  - Code du travail: 11,644 chunks → `code_travail` collection
-  - KALI: 14,154 chunks → `kali` collection
-  - Total: 25,798 chunks with BGE-M3 embeddings
-  - Decision needed: GPU (vast.ai) vs CPU (smaller model)
+- [x] **Create Makefile automation**
+  - `make setup`, `make parse`, `make ingest`, `make ingest-only`
+  - Built-in error checking and status validation
+  - `make ingest-only`: JSONL-only ingestion (no raw data needed)
+- [x] **Build vast.ai automation for GPU embedding**
+  - Created `scripts/run_vast_ingestion.py` - Full automation
+  - Created `scripts/embed_chunks.py` - Standalone embedding generator
+  - Simplified workflow: Upload JSONL + script, embed, download
+  - No Docker complexity, no GitHub required
+  - Cost: ~$0.10-0.30 for 25,798 chunks
+  - Key learnings: Use dlperf/score, test SSH connectivity, SCP syntax
+- [x] **Update ingestion scripts for pre-computed embeddings**
+  - Both scripts detect embeddings in JSONL automatically
+  - Skip embedding step if present, load directly
+  - Fast local indexing (2 minutes vs 20+ minutes)
+- [x] **Run embeddings ingestion**
+  - Embeddings generated on vast.ai (24GB VRAM GPU, ~15-20 min)
+  - Code du travail: 11,644 chunks → `code_travail` collection ✅
+  - KALI: 14,154 chunks → `kali` collection ✅
+  - Total: 25,798 chunks with BGE-M3 embeddings (1024 dims)
+  - Qdrant running at http://localhost:6333
+- [x] **Data quality analysis**
+  - Code du travail: 60% <500 chars, mean 587 chars
+  - KALI: 46% <500 chars, mean 1130 chars
+  - 175 empty chunks (1.2%), 285 oversized chunks (1.1%)
+  - Decision: Proceed, refactor if retrieval quality suffers
 - [ ] **Build basic retrieval pipeline**
   - Query → Embedding → Retrieval
   - Top-k selection
@@ -84,9 +105,14 @@ Basic RAG system that can retrieve relevant articles from both sources.
   - Manual testing with sample questions
   - Check if correct articles are retrieved
   - Tune top-k and similarity thresholds
+  - Evaluate chunking strategy performance
 
 ### Deliverable
-Working retrieval pipeline that can find relevant legal articles for queries.
+✅ **PHASE 2 COMPLETE**: 25,798 chunks indexed in Qdrant with BGE-M3 embeddings
+- Working vast.ai automation for GPU embedding
+- Pre-computed embedding support in pipelines
+- Makefile automation for reproducibility
+- Ready for retrieval pipeline development
 
 ---
 

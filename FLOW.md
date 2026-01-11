@@ -428,17 +428,99 @@ make status   # Check pipeline status
 - Perfect for cloud GPU instances or moving between machines
 - Enables testing different embedding models without re-parsing
 
+### 2.5 Vast.ai Automation ✅
+
+**Challenge**: Local GPU insufficient for BGE-M3 embedding generation (requires 24GB VRAM)
+
+**Solution**: Automated vast.ai workflow for cloud GPU embedding
+
+**Implementation**: `scripts/run_vast_ingestion.py`
+
+**Workflow**:
+1. Search for GPU instances (≥24GB VRAM, good dlperf score)
+2. Provision instance (~$0.20-0.50/hr)
+3. Upload JSONL files + embedding script
+4. Generate BGE-M3 embeddings on GPU
+5. Compress and download embedded JSONL files
+6. Destroy instance (or keep alive for testing)
+
+**Architecture decision: Simplified embedding-only workflow**
+- **Problem**: Docker-in-Docker complexity, private repo access
+- **Solution**: Upload `embed_chunks.py` directly, no git clone needed
+- **Benefits**: Faster setup, lower costs (gzip compression), no GitHub required
+
+**Key learnings**:
+- Use `dlperf` (tested) not `inet_down` (self-reported, often fake)
+- Sort by `score` (ML performance) not just price
+- SSH connectivity testing required (status "running" ≠ SSH ready)
+- SCP uses `-P` (uppercase), SSH uses `-p` (lowercase)
+- PyTorch in Docker images may need upgrading for compatibility
+
+**Files created**:
+- `scripts/embed_chunks.py` - Standalone embedding generator
+- `scripts/run_vast_ingestion.py` - Full automation
+- Updated ingestion scripts to detect pre-computed embeddings
+
+**Cost**: ~$0.10-0.30 for full embedding generation (25,798 chunks)
+
+### 2.6 Embedding Generation & Indexing ✅
+
+**Embeddings generated on vast.ai:**
+- Model: BAAI/bge-m3 (1024 dimensions)
+- GPU: 24GB VRAM instances (RTX 3090/4090 class)
+- Time: ~15-20 minutes for 25,798 chunks
+- Size: ~140MB (code_travail) + ~170MB (kali) with embeddings
+
+**Local indexing:**
+- Detected pre-computed embeddings in JSONL
+- Skipped embedding step (just load + write to Qdrant)
+- Time: ~2 minutes total (fast, CPU-bound)
+
+**Collections created:**
+- `code_travail`: 11,644 chunks with BGE-M3 embeddings
+- `kali`: 14,154 chunks with BGE-M3 embeddings
+- **Total: 25,798 vectors indexed in Qdrant**
+
+**Qdrant dashboard**: `http://localhost:6333/dashboard`
+
+### 2.7 Data Quality Observations
+
+**Chunking analysis:**
+- Code du travail: 60% <500 chars (short articles), mean 587 chars
+- KALI: 46% <500 chars, mean 1130 chars
+- 175 empty chunks in KALI (1.2% - parsing failures)
+- 7 oversized chunks in code_travail (>8000 chars - annexes with tables)
+- 278 oversized chunks in KALI (2%)
+
+**Decision**: Proceed with current chunking, refactor if retrieval quality suffers
+- Can always re-chunk and re-embed later
+- Most chunks are reasonable size
+- Issues affect <3% of data
+- Better to validate with real queries first
+
+**Future improvements**:
+- Parent-child chunking for tiny articles
+- Better annex handling (tables, lists)
+- Filter empty chunks before embedding
+
+## Phase 2 Complete! ✅
+
+**Achievements:**
+- ✅ Qdrant vector store running locally
+- ✅ BGE-M3 embeddings generated (25,798 chunks)
+- ✅ All data indexed with rich metadata
+- ✅ Vast.ai automation for GPU embedding
+- ✅ Pre-computed embedding detection in pipelines
+- ✅ Makefile automation for reproducibility
+
+**Ready for Phase 3**: Build retrieval pipeline and test with labor law queries
+
 ## Next Steps
 
-### Phase 2: Retrieval Foundation (In Progress)
-- ✅ Vector store setup (Qdrant)
-- ✅ Embedding model selection (BGE-M3)
-- ✅ Ingestion pipeline implementation (Code du travail)
-- ✅ Ingestion pipeline implementation (KALI)
-- ✅ Pipeline automation (Makefile)
-- ⏳ Run embeddings (pending GPU/CPU decision)
+### Phase 3: Basic Retrieval (In Progress)
 - ⏳ Build basic retrieval pipeline
 - ⏳ Test retrieval quality with sample queries
+- ⏳ Evaluate chunking strategy performance
 
 ### Phase 3: Agentic Layer (Pending)
 - Multi-step reasoning workflow

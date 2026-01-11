@@ -131,16 +131,19 @@ make clean-qdrant     # Remove Qdrant storage (destructive!)
 - `data/processed/code_travail_chunks.jsonl` (11,644 chunks)
 - `data/processed/kali_chunks.jsonl` (14,154 chunks)
 
-### 🚧 Phase 2: Retrieval Foundation (In Progress)
-- **Vector Store**: Qdrant (Docker-based)
+### ✅ Phase 2: Retrieval Foundation (Complete)
+- **Vector Store**: Qdrant (Docker-based, running at http://localhost:6333)
 - **Embedding Model**: BGE-M3 (1024 dims, French-optimized)
-- **Ingestion Pipelines**: Haystack 2.x with auto GPU/CPU detection
-  - `ingest_code_travail.py` - 11,644 chunks
-  - `ingest_kali.py` - 14,154 chunks from 7 conventions
+- **Ingestion Pipelines**: Haystack 2.x with pre-computed embedding support
+  - `ingest_code_travail.py` - 11,644 chunks → `code_travail` collection
+  - `ingest_kali.py` - 14,154 chunks → `kali` collection
+- **Vast.ai Automation**: GPU-based embedding generation (~$0.10-0.30)
+  - `scripts/run_vast_ingestion.py` - Full automation
+  - `scripts/embed_chunks.py` - Standalone embedding script
 - Separate collections for explicit agent routing
 - Full automation via Makefile
 
-**Status**: Ingestion scripts ready, awaiting execution (pending GPU/CPU decision)
+**Total: 25,798 chunks indexed with BGE-M3 embeddings**
 
 ### ⏳ Phase 3: Agentic Layer (Pending)
 - Multi-step reasoning workflow
@@ -187,42 +190,50 @@ We want flexibility to experiment with chunking strategies. Their fixed-window a
 ## Current Status
 
 **Completed**:
-- ✅ Data parsing pipeline (11,644 + 14,154 chunks)
-- ✅ Qdrant setup and configuration
-- ✅ Ingestion pipelines for both Code du travail and KALI
-- ✅ Full automation via Makefile
-- ✅ Comprehensive documentation
+- ✅ Phase 1: Data parsing pipeline (11,644 + 14,154 chunks)
+- ✅ Phase 2: Vector database with embeddings (25,798 chunks indexed)
+  - Qdrant running at http://localhost:6333
+  - BGE-M3 embeddings (1024 dims)
+  - Two collections: `code_travail` and `kali`
+- ✅ Vast.ai automation for GPU-based embedding
+- ✅ Makefile automation (`make ingest-only` for pre-computed embeddings)
+- ✅ Comprehensive documentation (FLOW.md, TODO.md, CLAUDE.md)
 
 **Next Steps**:
-- Run embeddings ingestion
-  - **Automated**: `poetry run python scripts/run_vast_ingestion.py` (vast.ai, ~$0.10, 20 min)
-  - **Manual**: `make ingest-only` (requires 12GB+ GPU VRAM or use smaller model)
-- Implement basic retrieval pipeline
-- Test retrieval quality with sample queries
+- Phase 3: Build basic retrieval pipeline
+- Test retrieval quality with sample labor law queries
+- Evaluate chunking strategy performance
+- Consider improvements (reranking, hybrid search, parent-child chunking)
 
-### Running Ingestion on vast.ai (Automated)
+### Running Embedding Generation on vast.ai (Optional)
 
-If you don't have a GPU or insufficient VRAM:
+Already done for this project, but if you want to regenerate embeddings or use different models:
 
 ```bash
 # 1. Setup vast.ai CLI
 pip install vastai
 vastai set api-key YOUR_KEY  # Get from https://cloud.vast.ai/account/
 
-# 2. Run automated ingestion
+# 2. Run automated embedding generation
 poetry run python scripts/run_vast_ingestion.py
 ```
 
 The script automatically:
-- Finds cheapest GPU (≥12GB VRAM, <$0.25/hr)
-- Uploads JSONL files (40MB)
-- Runs ingestion with BGE-M3
-- Downloads Qdrant storage back
-- Destroys instance
+- Finds best GPU (≥24GB VRAM, good dlperf/score)
+- Uploads JSONL files + embedding script (40MB)
+- Generates BGE-M3 embeddings on GPU
+- Compresses and downloads embedded JSONL files
+- Destroys instance (or keeps alive with `keep_alive=True`)
 
-**Cost**: ~$0.10-0.20 total
+**Cost**: ~$0.10-0.30 for 25,798 chunks (15-20 minutes)
 
-See `scripts/README.md` for details.
+**Then locally:**
+```bash
+gunzip data/processed/*.jsonl.gz
+make ingest-only  # Fast local indexing with pre-computed embeddings
+```
+
+See `scripts/README.md` for details and troubleshooting.
 
 ## License
 
