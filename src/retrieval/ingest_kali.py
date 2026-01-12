@@ -6,7 +6,7 @@ This script:
 2. Generates BGE-M3 embeddings using sentence-transformers
 3. Indexes documents into Qdrant collection 'kali'
 
-Supports both local Qdrant and Qdrant Cloud (via config/qdrant_config.json)
+Supports both local Qdrant and Qdrant Cloud (configured via .env file)
 """
 
 import json
@@ -20,6 +20,7 @@ from haystack.components.embedders import SentenceTransformersDocumentEmbedder
 from haystack.components.writers import DocumentWriter
 from haystack.utils.device import ComponentDevice
 from haystack_integrations.document_stores.qdrant import QdrantDocumentStore
+from src.config.constants import QDRANT_CONFIG
 
 
 def load_chunks(jsonl_path: Path) -> tuple[List[Document], bool]:
@@ -80,22 +81,9 @@ def load_chunks(jsonl_path: Path) -> tuple[List[Document], bool]:
     return documents, has_embeddings
 
 
-def load_qdrant_config() -> Dict:
-    """Load Qdrant configuration from config file."""
-    config_path = Path(__file__).parent.parent.parent / "config" / "qdrant_config.json"
-
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(config_path, 'r') as f:
-        config = json.load(f)
-
-    return config
-
-
 def create_qdrant_store(collection_name: str, embedding_dim: int = 1024) -> QdrantDocumentStore:
     """Create and configure Qdrant document store (local or cloud)."""
-    config = load_qdrant_config()
+    config = QDRANT_CONFIG
     qdrant_type = config.get("type", "local")
 
     if qdrant_type == "cloud":

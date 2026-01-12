@@ -133,14 +133,18 @@ cd admin-rag
 # 2. Install Poetry (if needed)
 curl -sSL https://install.python-poetry.org | python3 -
 
-# 3. Option A: Use pre-embedded JSONL files (RECOMMENDED - no raw data needed)
+# 3. Configure environment variables
+cp .env.template .env
+# Edit .env and fill in your Qdrant credentials (for cloud) or use local defaults
+
+# 4. Option A: Use pre-embedded JSONL files (RECOMMENDED - no raw data needed)
 #    Place code_travail_chunks.jsonl and kali_chunks.jsonl in data/processed/
 #    (Contact maintainer for access - 40MB total)
 
 make setup           # Install deps + start local Qdrant
 make ingest-only     # Index pre-embedded vectors (fast, ~1 minute)
 
-# 4. Option B: Full pipeline from raw data (requires 10GB XML dumps)
+# 5. Option B: Full pipeline from raw data (requires 10GB XML dumps)
 #    Download raw data (see Data Sources below) → Place in data/raw/
 
 make all             # Parse + embed + index (slow, requires GPU or vast.ai)

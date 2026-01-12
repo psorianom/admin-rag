@@ -1,0 +1,11 @@
+{
+  "type": "cloud",
+  "cloud": {
+    "url": "https://your-cluster-id.region.aws.cloud.qdrant.io:6333",
+    "api_key": "your_qdrant_cloud_api_key_here"
+  },
+  "local": {
+    "url": "http://localhost:6333",
+    "api_key": null
+  }
+}

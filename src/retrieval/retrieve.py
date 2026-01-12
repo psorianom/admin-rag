@@ -5,7 +5,7 @@ This script queries Qdrant vector store (local or cloud).
 Supports both semantic search (with embeddings) and keyword search (BM25).
 
 This script:
-1. Connects to Qdrant (local or cloud via config/qdrant_config.json)
+1. Connects to Qdrant (local or cloud, configured via .env file)
 2. Uses semantic search on pre-computed embeddings
 3. Returns results with metadata and similarity scores
 """
@@ -18,24 +18,12 @@ from haystack.utils.auth import Secret
 from haystack_integrations.document_stores.qdrant import QdrantDocumentStore
 from haystack.components.retrievers.qdrant import QdrantEmbeddingRetriever
 from sentence_transformers import SentenceTransformer
+from src.config.constants import QDRANT_CONFIG
 
 
 # Global document stores and embedder (cached after first load)
 _document_stores = {}
 _embedder = None
-
-
-def load_qdrant_config() -> Dict:
-    """Load Qdrant configuration from config file."""
-    config_path = Path(__file__).parent.parent.parent / "config" / "qdrant_config.json"
-
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(config_path, 'r') as f:
-        config = json.load(f)
-
-    return config
 
 
 def get_embedder() -> SentenceTransformer:
@@ -52,8 +40,8 @@ def get_document_store(collection_name: str) -> QdrantDocumentStore:
     if collection_name in _document_stores:
         return _document_stores[collection_name]
 
-    # Load config
-    config = load_qdrant_config()
+    # Get config from environment
+    config = QDRANT_CONFIG
     qdrant_type = config.get("type", "local")
 
     if qdrant_type == "cloud":

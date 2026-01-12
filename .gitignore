@@ -39,6 +39,9 @@ data/*.zip
 .env
 .venv
 
+# Config with secrets
+config/qdrant_config.json
+
 # Poetry
 poetry.lock
 .venv/
