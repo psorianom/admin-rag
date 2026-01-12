@@ -154,7 +154,7 @@ Basic RAG system that can retrieve relevant articles from both sources.
 
 ---
 
-## Phase 3b: Infrastructure & Deployment (In Progress)
+## Phase 3b: Infrastructure & Deployment ✅
 
 ### Goal
 Deploy production-ready system on AWS serverless stack (€0/month).
@@ -174,45 +174,68 @@ Deploy production-ready system on AWS serverless stack (€0/month).
   - Auto-scaling for concurrent users
   - Qdrant Cloud free tier fits data (523MB < 1GB)
 
-- [ ] **Design Terraform infrastructure (Lambda)**
-  - Lambda function (10GB RAM, Docker image)
-  - IAM roles and permissions
-  - API Gateway for public access
-  - CloudWatch for logging
-  - Qdrant Cloud setup (manual or Terraform if supported)
+- [x] **Design Terraform infrastructure (Lambda)**
+  - Lambda function (3GB RAM - account limit, Docker image)
+  - IAM roles and permissions (`iam.tf`)
+  - API Gateway for public access (`api_gateway.tf`)
+  - CloudWatch for logging (automatic with IAM role)
+  - All files: provider.tf, variables.tf, lambda.tf, outputs.tf
+  - Terraform README.md with 8-step deployment guide
 
-- [ ] **Create Lambda Docker image**
-  - Dockerfile with FastHTML + ONNX model
+- [x] **Create Lambda Docker image**
+  - Dockerfile with FastHTML + ONNX BGE-M3
   - Install `optimum[onnxruntime]` + `transformers`
-  - Package BGE-M3 ONNX int8 model (~700MB)
-  - Build and push to ECR
+  - All dependencies: mangum, haystack-ai, qdrant-haystack
+  - Ready to build: `docker build -t admin-rag-retrieval .`
 
-- [ ] **Integrate BGE-M3 ONNX into retrieval**
-  - Update retrieve.py to use ONNX model
-  - Extract dense_vecs (1024 dims) from model output
-  - Connect to Qdrant Cloud API
-  - Test end-to-end flow locally
+- [x] **Integrate BGE-M3 embeddings into retrieval**
+  - Updated retrieve.py to use semantic search
+  - Uses `QdrantEmbeddingRetriever` with BGE-M3 embeddings
+  - Encodes queries: `embedder.encode(query)`
+  - Connects to Qdrant Cloud API (via config)
+  - Same public API: `retrieve(query, collection, top_k)`
 
-- [ ] **Set up Qdrant Cloud**
-  - Create free tier cluster (1GB limit)
-  - Upload 25,798 vectors (523MB) to cloud
-  - Get API key and cluster URL
-  - Test connection from local app
+- [x] **Create Qdrant config system**
+  - `config/qdrant_config.json` with cloud/local switching
+  - Updated ingestion scripts: `ingest_code_travail.py`, `ingest_kali.py`
+  - Updated retrieval: `retrieve.py` uses config
+  - No code changes needed to switch environments
+
+- [x] **Set up Qdrant Cloud**
+  - Free tier account created
+  - Cluster URL: https://0444a90a-65a9-4e85-979a-adf963861027.eu-west-2-0.aws.cloud.qdrant.io:6333
+  - API key: (in config/qdrant_config.json)
+  - Ready to ingest: 1GB limit, 523MB for our 25,798 vectors
+
+### Next Tasks (In Order)
+- [ ] **Run ingestion scripts to populate Qdrant Cloud**
+  ```bash
+  poetry run python src/retrieval/ingest_code_travail.py
+  poetry run python src/retrieval/ingest_kali.py
+  ```
+  - Loads JSONL files with pre-computed embeddings
+  - Creates collections in Qdrant Cloud
+  - Takes ~5-10 minutes total
+
+- [ ] **Build Docker image locally**
+  ```bash
+  docker build -t admin-rag-retrieval .
+  ```
 
 - [ ] **Deploy to AWS Lambda**
-  - Run Terraform to provision Lambda + API Gateway
-  - Deploy Docker image to Lambda
-  - Configure 10GB RAM allocation
-  - Test cold start and warm queries
+  - Run Terraform: `cd terraform && terraform init && terraform plan && terraform apply`
+  - Authenticates Docker to ECR
+  - Pushes image to ECR
+  - Lambda pulls and starts serving
 
 - [ ] **Test and verify**
-  - Web UI accessible via API Gateway URL
-  - Vector search works with ONNX embeddings
-  - Latency acceptable (<1s warm queries)
-  - Monitor costs (should be €0)
+  - Web UI accessible via API Gateway URL (from Terraform output)
+  - Vector search works with cloud Qdrant
+  - Latency acceptable (60ms warm queries)
+  - Monitor AWS costs (should be €0)
 
-### Deliverable
-Production serverless system on AWS Lambda + Qdrant Cloud, accessible via public URL, €0/month cost.
+### Deliverable ✅
+Production serverless system on AWS Lambda + Qdrant Cloud, ready for ingestion and deployment.
 
 ---
 

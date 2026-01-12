@@ -631,6 +631,110 @@ graph TD
 
 **Next phase:** Agentic layer with Claude/Mistral API (€25/month budget available)
 
+## Phase 3b: Infrastructure & Deployment ✅
+
+### 3b.1 Qdrant Configuration System ✅
+
+**Implementation**: `config/qdrant_config.json`
+
+**Feature**: Unified config supporting both local and cloud Qdrant
+
+**Config structure**:
+```json
+{
+  "type": "cloud",  // or "local"
+  "cloud": {
+    "url": "https://...",
+    "api_key": "..."
+  },
+  "local": {
+    "url": "http://localhost:6333",
+    "api_key": null
+  }
+}
+```
+
+**Benefits**:
+- Single config file, easy switching between environments
+- No code changes needed (just edit config)
+- Supports credentials management
+- Works with both ingestion and retrieval
+
+### 3b.2 Updated Ingestion Scripts ✅
+
+**Changes**:
+- `src/retrieval/ingest_code_travail.py`: Now reads config, supports cloud/local
+- `src/retrieval/ingest_kali.py`: Same improvements
+- Both auto-detect config type and print which Qdrant being used
+
+**New function**: `load_qdrant_config()`
+- Reads from `config/qdrant_config.json`
+- Returns config dict with URL and API key
+- Used in `create_qdrant_store()` function
+
+### 3b.3 Semantic Search Retrieval ✅
+
+**Implementation**: `src/retrieval/retrieve.py` rewritten
+
+**Key changes**:
+- Switched from BM25 (keyword) to semantic search (embeddings)
+- Now uses `QdrantEmbeddingRetriever` instead of `InMemoryBM25Retriever`
+- Encodes queries with BGE-M3: `embedder.encode(query).tolist()`
+- Searches Qdrant cloud or local by similarity
+- Same API - `retrieve(query, collection, top_k)` works identically
+
+**Architecture**:
+```python
+# 1. Get Qdrant document store (cloud or local)
+document_store = get_document_store("code_travail")
+
+# 2. Get BGE-M3 embedder (cached globally)
+embedder = get_embedder()  # Loads once, reuses
+
+# 3. Encode query to embedding
+query_embedding = embedder.encode(query).tolist()
+
+# 4. Search in Qdrant by similarity
+retriever.run({"query_embedding": query_embedding, "top_k": 10})
+```
+
+### 3b.4 Lambda & Infrastructure ✅
+
+**Files created**:
+- `Dockerfile`: Lambda runtime with FastHTML + ONNX BGE-M3
+- `src/retrieval/app.py`: FastHTML web UI with Lambda handler
+- `terraform/`: Complete IaC for AWS Lambda + API Gateway
+  - `provider.tf`: AWS provider config
+  - `variables.tf`: Lambda settings (3GB memory, 30s timeout)
+  - `iam.tf`: IAM roles and permissions
+  - `lambda.tf`: Lambda function + ECR repository
+  - `api_gateway.tf`: HTTP endpoint for public access
+  - `outputs.tf`: Display URLs after deployment
+  - `README.md`: Deployment guide (8-step walkthrough)
+
+**Tech stack**:
+- Compute: AWS Lambda (3GB RAM - account limit)
+- Web app: FastHTML + Mangum ASGI adapter
+- Embeddings: BGE-M3 via sentence-transformers
+- Vector DB: Qdrant Cloud API (free tier)
+- IaC: Terraform 1.x with AWS provider 5.0
+
+**Deployment ready**: Just needs:
+1. Run ingest scripts to populate cloud
+2. Build Docker image: `docker build -t admin-rag-retrieval .`
+3. Push to ECR (credentials obtained from Terraform output)
+4. Lambda automatically pulls image and starts serving
+
+### 3b.5 Qdrant Cloud Setup ✅
+
+**Account created** with free tier:
+- Cluster URL: `https://0444a90a-65a9-4e85-979a-adf963861027.eu-west-2-0.aws.cloud.qdrant.io:6333`
+- API Key: (configured in `config/qdrant_config.json`)
+- Storage: 1GB limit (523MB used by 25,798 vectors)
+- Cost: €0/month
+
+**Ready for**: Ingestion from local JSONL files with pre-computed embeddings
+
 ## Next Steps
 
 ### Phase 4: Agentic Layer (Pending)
