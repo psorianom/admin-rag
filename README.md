@@ -198,12 +198,18 @@ We want flexibility to experiment with chunking strategies. Their fixed-window a
 - ✅ Vast.ai automation for GPU-based embedding
 - ✅ Makefile automation (`make ingest-only` for pre-computed embeddings)
 - ✅ Comprehensive documentation (FLOW.md, TODO.md, CLAUDE.md)
+- ✅ Phase 3b: Infrastructure & Deployment (Ready for ingestion)
+  - Terraform IaC for AWS Lambda + API Gateway
+  - Docker image for Lambda with FastHTML + ONNX BGE-M3
+  - Qdrant config system (cloud/local switching)
+  - Semantic search retrieval updated to use embeddings
+  - Qdrant Cloud free tier account created (API credentials configured)
 
 **Next Steps**:
-- Phase 3: Build basic retrieval pipeline
-- Test retrieval quality with sample labor law queries
-- Evaluate chunking strategy performance
-- Consider improvements (reranking, hybrid search, parent-child chunking)
+- Run ingest scripts to populate Qdrant Cloud with vectors
+- Build Docker image and deploy to AWS Lambda
+- Test end-to-end retrieval via API Gateway
+- Build agentic layer with LLM
 
 ### Running Embedding Generation on vast.ai (Optional)
 

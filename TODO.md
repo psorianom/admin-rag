@@ -116,7 +116,107 @@ Basic RAG system that can retrieve relevant articles from both sources.
 
 ---
 
-## Phase 3: Agentic Layer (3-4 days)
+## Phase 3: Retrieval Pipeline ✅
+
+### Goal
+Basic RAG system that can retrieve relevant articles from both sources.
+
+### Completed Tasks
+- [x] **Build basic retrieval pipeline**
+  - BM25 keyword search (no embeddings needed locally)
+  - Loads JSONL into InMemoryDocumentStore
+  - Works on both code_travail and kali collections
+
+- [x] **Create FastHTML web UI**
+  - Search box with query input
+  - Collection selector (code_travail / kali)
+  - Convention filter (dynamically shown for KALI)
+  - Result cards with scores and metadata
+  - HTMX for dynamic updates, no page reloads
+
+- [x] **Implement metadata filtering**
+  - Filter by IDCC for convention-specific searches
+  - Filter by article_num, source, hierarchy
+  - Works seamlessly with BM25
+
+- [x] **Test retrieval quality**
+  - Manual testing with sample labor law questions
+  - Confirmed correct articles retrieved
+  - BM25 works well for keyword matching
+  - Limitation: Pure keyword matching, no semantic understanding
+
+### Deliverable
+✅ **PHASE 3 COMPLETE**: Functional retrieval system with web UI
+- BM25 retrieval pipeline
+- FastHTML web interface
+- Metadata filtering by convention
+- Tested and working locally
+
+---
+
+## Phase 3b: Infrastructure & Deployment (In Progress)
+
+### Goal
+Deploy production-ready system on AWS serverless stack (€0/month).
+
+### Tasks
+- [x] **Test ONNX BGE-M3 int8 model latency**
+  - Tested `gpahal/bge-m3-onnx-int8` model locally
+  - Cold start: 4.99s (acceptable)
+  - Warm query: 0.06s (60ms - excellent!)
+  - Confirmed 1024-dim dense embeddings
+  - Installed `optimum[onnxruntime]` + `transformers`
+  - Decision: Lambda is viable for production
+
+- [x] **Architecture decision: Lambda vs EC2**
+  - Lambda wins: 60ms query latency vs 5-8s on EC2
+  - Cost: €0 (free tier) vs €10/month
+  - Auto-scaling for concurrent users
+  - Qdrant Cloud free tier fits data (523MB < 1GB)
+
+- [ ] **Design Terraform infrastructure (Lambda)**
+  - Lambda function (10GB RAM, Docker image)
+  - IAM roles and permissions
+  - API Gateway for public access
+  - CloudWatch for logging
+  - Qdrant Cloud setup (manual or Terraform if supported)
+
+- [ ] **Create Lambda Docker image**
+  - Dockerfile with FastHTML + ONNX model
+  - Install `optimum[onnxruntime]` + `transformers`
+  - Package BGE-M3 ONNX int8 model (~700MB)
+  - Build and push to ECR
+
+- [ ] **Integrate BGE-M3 ONNX into retrieval**
+  - Update retrieve.py to use ONNX model
+  - Extract dense_vecs (1024 dims) from model output
+  - Connect to Qdrant Cloud API
+  - Test end-to-end flow locally
+
+- [ ] **Set up Qdrant Cloud**
+  - Create free tier cluster (1GB limit)
+  - Upload 25,798 vectors (523MB) to cloud
+  - Get API key and cluster URL
+  - Test connection from local app
+
+- [ ] **Deploy to AWS Lambda**
+  - Run Terraform to provision Lambda + API Gateway
+  - Deploy Docker image to Lambda
+  - Configure 10GB RAM allocation
+  - Test cold start and warm queries
+
+- [ ] **Test and verify**
+  - Web UI accessible via API Gateway URL
+  - Vector search works with ONNX embeddings
+  - Latency acceptable (<1s warm queries)
+  - Monitor costs (should be €0)
+
+### Deliverable
+Production serverless system on AWS Lambda + Qdrant Cloud, accessible via public URL, €0/month cost.
+
+---
+
+## Phase 4: Agentic Layer (Pending)
 
 ### Goal
 Multi-step reasoning system that orchestrates retrieval and combines rules.
@@ -137,21 +237,24 @@ Multi-step reasoning system that orchestrates retrieval and combines rules.
   - Tool registration and routing
   - Multi-step reasoning flow
 - [ ] **Choose & integrate LLM(s)**
-  - Test Mistral Large/Medium (French-native, cheaper)
-  - Test Claude Sonnet (better reasoning, more expensive)
-  - Test open-weight alternatives
-  - Potentially hybrid approach
+  - Test Claude API (better reasoning, €10-15/month)
+  - Test Mistral Large (cheaper, French-native, ~€3/month)
+  - Evaluate tradeoffs
 - [ ] **Prompt engineering**
   - System prompts for legal reasoning
   - Few-shot examples for French labor law
   - Citation formatting instructions
+
+### Budget allocation:
+- Infrastructure: €0/month (Lambda + Qdrant Cloud free tier)
+- LLM API: €20-25/month (full budget available)
 
 ### Deliverable
 Agent that can answer complex questions requiring multi-step reasoning across sources.
 
 ---
 
-## Phase 4: Iteration & Quality (2-3 days)
+## Phase 5: Iteration & Quality (Pending)
 
 ### Goal
 Production-ready system with validated answer quality.
@@ -188,7 +291,7 @@ Reliable system with good answer quality and proper citations.
 
 ---
 
-## Phase 5: Polish & Extensions (Optional)
+## Phase 6: Polish & Extensions (Optional)
 
 **Time**: Open-ended, depends on requirements
 

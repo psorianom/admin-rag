@@ -58,5 +58,11 @@ qdrant_storage/
 *.log
 logs/
 
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate*
+terraform/terraform.tfvars
+
 # Documentation (tracked)
 # FLOW.md, TODO.md, and CLAUDE.md are tracked in git

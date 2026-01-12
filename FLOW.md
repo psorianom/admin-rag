@@ -515,19 +515,132 @@ make status   # Check pipeline status
 
 **Ready for Phase 3**: Build retrieval pipeline and test with labor law queries
 
+## Phase 3: Retrieval Pipeline ✅
+
+**Completed:**
+- ✅ Built BM25 retrieval pipeline (no embeddings needed locally)
+- ✅ Created FastHTML web UI for testing
+- ✅ Implemented metadata filtering (by IDCC, collection)
+- ✅ Tested with sample labor law queries
+
+**Key decisions:**
+- BM25 keyword search for local development (no GPU needed)
+- Embedding via external API (Cohere/HF) for inference
+- Pre-computed BGE-M3 embeddings in Qdrant for semantic search later
+
+## Phase 3b: Infrastructure & Deployment (In Progress)
+
+### Architecture Decision Evolution
+
+**Budget:** €75 for 3 months (~€25/month)
+
+#### Testing Phase: ONNX BGE-M3 int8 Performance ✅
+
+**Model tested:** `gpahal/bge-m3-onnx-int8` (quantized int8 ONNX model)
+
+**Results:**
+- Model size: ~700MB (fits Lambda)
+- Cold start: 4.99s (model load + tokenizer)
+- Warm query: **0.06s** (60ms!) ✅
+- Embeddings confirmed: 1024-dim dense vectors
+- Quality: int8 quantization (~1-2% accuracy loss, acceptable for demo)
+
+**Key insight:** CPU inference with ONNX int8 is **fast enough** for production UI.
+
+**Dependencies:** `optimum[onnxruntime]` + `transformers`
+
+#### Final Architecture: AWS Lambda + Qdrant Cloud (Serverless)
+
+**Tech stack:**
+- **Compute**: AWS Lambda (10GB RAM) - FastHTML web app + BGE-M3 ONNX inference
+- **Vector DB**: Qdrant Cloud free tier (523MB vector storage, fits 25,798 docs)
+- **Web framework**: FastHTML (Python)
+- **Embeddings**: BGE-M3 ONNX int8 model (local in Lambda, 60ms latency)
+- **IaC**: Terraform (learn AWS Lambda + serverless infrastructure)
+
+**Why Lambda over EC2:**
+- True serverless: €0 for bursty/low traffic (free tier: 1M requests/month)
+- Auto-scales: Multiple concurrent users = parallel Lambda instances
+- Fast warm latency: 60ms query embedding (vs 5-8s on EC2 t4g.small CPU)
+- Qdrant Cloud free tier: 523MB fits our data perfectly
+
+**Why this beats EC2:**
+- EC2 t4g.small CPU: 5-8s embedding time (too slow for demo)
+- Lambda with ONNX int8: 0.06s embedding time (production-ready)
+- Cost: €0 vs €10/month
+- Complexity: Similar (Terraform for both)
+
+**Deployment flow:**
+1. Terraform provisions Lambda function, IAM roles, API Gateway
+2. Package Lambda: Docker image with FastHTML + ONNX model + dependencies
+3. Deploy to Lambda with 10GB RAM allocation
+4. Qdrant Cloud: Create free tier cluster, upload vectors
+5. Web app: Query → Lambda embeds → Qdrant Cloud searches → results
+
+### Infrastructure Architecture Diagram
+
+```mermaid
+graph TB
+    User["👤 User"]
+    APIGW["API Gateway<br/>(Public HTTP Endpoint)"]
+    Lambda["AWS Lambda<br/>(10GB RAM)<br/>FastHTML + ONNX BGE-M3"]
+    Qdrant["Qdrant Cloud<br/>(Free Tier)<br/>523MB Vectors"]
+    ECR["ECR Repository<br/>(Docker Images)"]
+
+    User -->|HTTP Request| APIGW
+    APIGW -->|Invoke Function| Lambda
+    Lambda -->|Load Image| ECR
+    Lambda -->|Vector Search| Qdrant
+    Qdrant -->|Results| Lambda
+    Lambda -->|HTTP Response| APIGW
+    APIGW -->|Response| User
+```
+
+### Terraform Files Dependency Diagram
+
+```mermaid
+graph TD
+    Provider["provider.tf<br/>(AWS Config)"]
+    Variables["variables.tf<br/>(Lambda Settings)"]
+    IAM["iam.tf<br/>(Roles & Permissions)"]
+    Lambda_File["lambda.tf<br/>(Lambda + ECR)"]
+    APIGateway["api_gateway.tf<br/>(HTTP Endpoint)"]
+    Outputs["outputs.tf<br/>(Display URLs)"]
+
+    Provider -->|Required by all| Variables
+    Variables -->|Used by| IAM
+    Variables -->|Used by| Lambda_File
+    Variables -->|Used by| APIGateway
+    IAM -->|Role ARN to| Lambda_File
+    Lambda_File -->|Function ARN to| APIGateway
+    APIGateway -->|Stage URL to| Outputs
+    Lambda_File -->|ECR URL to| Outputs
+    Lambda_File -->|Function name to| Outputs
+```
+
+**Monthly cost breakdown:**
+- Lambda: €0 (free tier, bursty traffic)
+- Qdrant Cloud: €0 (free tier, 523MB < 1GB limit)
+- API Gateway: €0 (free tier, <1M requests/month)
+- **Total: €0/month** (leaves full budget for agentic layer)
+
+**Trade-offs:**
+- Cold starts: First query takes 5s (acceptable, just warm up before demo)
+- Vendor lock-in: Tied to AWS Lambda + Qdrant Cloud
+- Benefits: €0 cost, fast queries, auto-scaling, production-ready latency
+
+**Next phase:** Agentic layer with Claude/Mistral API (€25/month budget available)
+
 ## Next Steps
 
-### Phase 3: Basic Retrieval (In Progress)
-- ⏳ Build basic retrieval pipeline
-- ⏳ Test retrieval quality with sample queries
-- ⏳ Evaluate chunking strategy performance
-
-### Phase 3: Agentic Layer (Pending)
-- Multi-step reasoning workflow
+### Phase 4: Agentic Layer (Pending)
+- Multi-step reasoning with Claude/Mistral
 - Convention identification tool
-- Dual-source retrieval
+- Dual-source retrieval orchestration
+- Prompt engineering for French legal reasoning
 
-### Phase 4: Evaluation & Quality (Pending)
+### Phase 5: Evaluation & Quality (Pending)
 - Test dataset creation
 - Quality tuning
 - Citation system
+- Feedback collection

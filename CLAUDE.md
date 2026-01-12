@@ -33,10 +33,27 @@ This is an **agentic RAG system for French labor law** combining:
 
 ## Git Commits
 
+**When to commit:**
+- After completing a significant feature or phase
+- After major refactoring or infrastructure changes
+- When multiple files are modified and logically related
+- Don't commit incomplete work or work-in-progress changes
+
+**How to commit:**
+- Write clear, concise commit messages (1-2 sentences)
+- Summarize what was done and why (focus on intent, not mechanics)
+- Use `git status` and `git diff` to review changes before committing
+- Stage related changes together, unrelated changes separately
+
 **NEVER add the following to commit messages:**
 - "Generated with Claude Code" footer
 - "Co-Authored-By: Claude Sonnet" attribution
 - Any Claude/Anthropic attribution or links
+
+**Also after committing:**
+- Push to remote: `git push`
+- Keep FLOW.md and TODO.md in sync with actual progress
+- Let user know in summary what was committed
 
 Keep commit messages clean and professional.
 

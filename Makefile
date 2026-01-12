@@ -1,4 +1,4 @@
-.PHONY: help setup install-deps start-qdrant stop-qdrant parse-code-travail parse-kali parse ingest-code-travail ingest-kali ingest ingest-only all clean clean-qdrant clean-processed status
+.PHONY: help setup install-deps start-qdrant stop-qdrant parse-code-travail parse-kali parse ingest-code-travail ingest-kali ingest ingest-only all clean clean-qdrant clean-processed status terraform-init terraform-validate terraform-plan terraform-apply terraform-destroy
 
 # Default target
 help:
@@ -25,6 +25,13 @@ help:
 	@echo "  make clean-processed    - Remove processed JSONL files"
 	@echo "  make clean-qdrant       - Remove Qdrant storage (destructive!)"
 	@echo "  make clean              - Clean all generated files"
+	@echo ""
+	@echo "Infrastructure (Terraform/AWS) targets:"
+	@echo "  make terraform-init     - Initialize Terraform workspace"
+	@echo "  make terraform-validate - Validate Terraform configuration"
+	@echo "  make terraform-plan     - Preview AWS resources to be created"
+	@echo "  make terraform-apply    - Deploy infrastructure to AWS"
+	@echo "  make terraform-destroy  - Delete all AWS resources (destructive!)"
 
 # Setup
 setup: install-deps start-qdrant
@@ -186,3 +193,32 @@ clean: clean-processed
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "   ✅ Clean complete"
+
+# Terraform / AWS Infrastructure
+terraform-init:
+	@echo "🚀 Initializing Terraform workspace..."
+	cd terraform && terraform init
+	@echo "   ✅ Terraform initialized"
+
+terraform-validate:
+	@echo "✔️  Validating Terraform configuration..."
+	cd terraform && terraform validate
+	@echo "   ✅ Configuration is valid"
+
+terraform-plan:
+	@echo "📋 Planning AWS resources..."
+	cd terraform && terraform plan
+	@echo "   ✅ Plan complete - review above"
+
+terraform-apply:
+	@echo "🚀 Deploying infrastructure to AWS..."
+	@echo "   ⚠️  This will create AWS resources and incur costs"
+	cd terraform && terraform apply
+	@echo "   ✅ Infrastructure deployed!"
+	@echo "   📌 Save the outputs above (API endpoint, ECR URL)"
+
+terraform-destroy:
+	@echo "⚠️  WARNING: This will delete ALL AWS resources!"
+	@echo "   ⚠️  Confirm you want to proceed..."
+	cd terraform && terraform destroy
+	@echo "   ✅ Resources destroyed"

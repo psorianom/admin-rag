@@ -5,6 +5,8 @@ This script:
 1. Loads KALI convention chunks from JSONL
 2. Generates BGE-M3 embeddings using sentence-transformers
 3. Indexes documents into Qdrant collection 'kali'
+
+Supports both local Qdrant and Qdrant Cloud (via config/qdrant_config.json)
 """
 
 import json
@@ -76,10 +78,38 @@ def load_chunks(jsonl_path: Path) -> tuple[List[Document], bool]:
     return documents, has_embeddings
 
 
+def load_qdrant_config() -> Dict:
+    """Load Qdrant configuration from config file."""
+    config_path = Path(__file__).parent.parent.parent / "config" / "qdrant_config.json"
+
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+
+    return config
+
+
 def create_qdrant_store(collection_name: str, embedding_dim: int = 1024) -> QdrantDocumentStore:
-    """Create and configure Qdrant document store."""
+    """Create and configure Qdrant document store (local or cloud)."""
+    config = load_qdrant_config()
+    qdrant_type = config.get("type", "local")
+
+    if qdrant_type == "cloud":
+        conn_config = config["cloud"]
+        url = conn_config["url"]
+        api_key = conn_config["api_key"]
+        print(f"Using Qdrant Cloud: {url}")
+    else:
+        conn_config = config["local"]
+        url = conn_config["url"]
+        api_key = conn_config.get("api_key")
+        print(f"Using Local Qdrant: {url}")
+
     document_store = QdrantDocumentStore(
-        url="http://localhost:6333",
+        url=url,
+        api_key=api_key,
         index=collection_name,
         embedding_dim=embedding_dim,
         recreate_index=True,  # Recreate collection if exists
@@ -204,12 +234,17 @@ def main():
     print("\n" + "="*80)
     print("Ingestion Complete!")
     print("="*80)
+    config = load_qdrant_config()
+    qdrant_url = config[config.get("type", "local")]["url"]
     print(f"Collection: kali")
     print(f"Documents indexed: {len(documents):,}")
     print(f"Conventions: {len(convention_counts)}")
     print(f"Embedding model: BAAI/bge-m3 (1024 dims)")
-    print(f"Qdrant URL: http://localhost:6333")
-    print(f"\nYou can view the collection at: http://localhost:6333/dashboard")
+    print(f"Qdrant URL: {qdrant_url}")
+    if "cloud" in qdrant_url:
+        print(f"\nYou can view the collection at your Qdrant Cloud console")
+    else:
+        print(f"\nYou can view the collection at: {qdrant_url}/dashboard")
 
 
 if __name__ == "__main__":
