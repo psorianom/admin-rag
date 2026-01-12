@@ -316,6 +316,48 @@ poetry run python src/ingestion/parse_kali.py
 - KALI (7 conventions): **14,154 chunks**
 - **Total: 25,798 chunks**
 
+### Data Pipeline Flow Diagram
+
+```mermaid
+graph LR
+    A[Raw XML Files] --> B[Parse Sections]
+    B --> C[Build Article-to-Section Mapping]
+    C --> D[Parse Articles]
+    D --> E[Filter Current Versions]
+    E --> F[Analyze Article Lengths]
+    F --> G{Length > 500 tokens?}
+    G -->|No| H[Keep as Single Chunk]
+    G -->|Yes| I[Semantic Chunking]
+    H --> J[Output JSONL]
+    I --> J
+    J --> K[Final Chunks Dataset]
+
+    subgraph "Code du travail"
+    A
+    B
+    C
+    D
+    E
+    F
+    G
+    H
+    I
+    J
+    end
+
+    subgraph "KALI Conventions"
+    A2[Raw XML Files] --> D2[Parse with IDCC Filter]
+    D2 --> E2[Filter Current Versions]
+    E2 --> F2[Analyze Lengths]
+    F2 --> G2{Length > 500 tokens?}
+    G2 -->|No| H2[Keep as Single Chunk]
+    G2 -->|Yes| I2[Semantic Chunking]
+    H2 --> J2[Output JSONL]
+    I2 --> J2
+    J2 --> K2[KALI Chunks Dataset]
+    end
+```
+
 ### Architecture Decision: Separate Collections vs Merged Corpus
 
 **Decision: Keep datasets SEPARATE for proper agent routing**
@@ -395,6 +437,36 @@ docker run -d -p 6333:6333 -p 6334:6334 \
 - `code_travail`: 11,644 chunks (script: `ingest_code_travail.py`)
 - `kali`: 14,154 chunks (script: `ingest_kali.py`)
 
+### Ingestion Pipeline Architecture Diagram
+
+```mermaid
+graph LR
+    JSONL[JSONL Files<br/>with embeddings] --> Loader[Load Documents]
+
+    Loader --> Check{Has pre-computed<br/>embeddings?}
+
+    Check -->|Yes| Skip[Skip Embedding<br/>Load from JSONL]
+    Check -->|No| Embed[BGE-M3 Embedder<br/>Generate 1024-dim vectors]
+
+    Skip --> Docs[Haystack Documents<br/>with metadata + embeddings]
+    Embed --> Docs
+
+    Docs --> Writer[Document Writer]
+    Writer --> Qdrant[Qdrant Collection]
+
+    Config[qdrant_config.json] -.->|Connection settings| Qdrant
+
+    subgraph "Metadata Preserved"
+        Meta[article_id<br/>article_num<br/>hierarchy<br/>section_title<br/>chunk_info<br/>source]
+    end
+
+    Docs -.-> Meta
+
+    style JSONL fill:#e1f5ff
+    style Qdrant fill:#d4edda
+    style Check fill:#fff3cd
+```
+
 ### 2.4 Pipeline Automation ✅
 
 **Implementation**: `Makefile`
@@ -462,6 +534,41 @@ make status   # Check pipeline status
 - Updated ingestion scripts to detect pre-computed embeddings
 
 **Cost**: ~$0.10-0.30 for full embedding generation (25,798 chunks)
+
+### Vast.ai Automation Workflow Diagram
+
+```mermaid
+sequenceDiagram
+    participant Local as Local Machine
+    participant Vast as Vast.ai API
+    participant Instance as GPU Instance
+    participant Storage as Cloud Storage
+
+    Local->>Vast: Search for GPU instances (≥24GB VRAM)
+    Vast-->>Local: Return available instances
+    Local->>Vast: Create instance (~$0.30/hr)
+    Vast-->>Local: Instance ID + SSH credentials
+
+    loop Wait for SSH Ready
+        Local->>Instance: Test SSH connectivity
+        Instance-->>Local: Connection status
+    end
+
+    Local->>Instance: SCP upload JSONL files (40MB)
+    Local->>Instance: SCP upload embed_chunks.py
+    Local->>Instance: SSH: pip install dependencies
+    Local->>Instance: SSH: python embed_chunks.py
+
+    Instance->>Instance: Load BGE-M3 model (2.7GB)
+    Instance->>Instance: Generate embeddings (1024 dims)
+    Instance->>Instance: Write to JSONL + gzip compress
+
+    Local->>Instance: SCP download compressed JSONL
+    Instance-->>Local: Embedded JSONL files (~140MB+170MB)
+
+    Local->>Vast: Destroy instance (or keep alive)
+    Vast-->>Local: Instance destroyed
+```
 
 ### 2.6 Embedding Generation & Indexing ✅
 
@@ -696,6 +803,36 @@ query_embedding = embedder.encode(query).tolist()
 
 # 4. Search in Qdrant by similarity
 retriever.run({"query_embedding": query_embedding, "top_k": 10})
+```
+
+### Semantic Search Retrieval Pipeline Diagram
+
+```mermaid
+graph TB
+    Query[User Query] --> Embedder[BGE-M3 Embedder]
+    Embedder --> QEmbed[Query Embedding<br/>1024 dimensions]
+
+    QEmbed --> Qdrant[Qdrant Document Store]
+
+    subgraph "Qdrant Collections"
+        CodeTravail[code_travail<br/>11,644 vectors]
+        KALI[kali<br/>14,154 vectors]
+    end
+
+    Qdrant --> CodeTravail
+    Qdrant --> KALI
+
+    CodeTravail --> Similarity[Cosine Similarity Search]
+    KALI --> Similarity
+
+    Similarity --> TopK[Top-K Results<br/>with metadata]
+    TopK --> Results[Formatted Results<br/>Article + Score + Context]
+
+    Config[qdrant_config.json] -.->|Cloud/Local| Qdrant
+
+    style Query fill:#e1f5ff
+    style Results fill:#d4edda
+    style Qdrant fill:#fff3cd
 ```
 
 ### 3b.4 Lambda & Infrastructure ✅

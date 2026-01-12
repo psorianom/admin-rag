@@ -65,4 +65,6 @@ terraform/terraform.tfstate*
 terraform/terraform.tfvars
 
 # Documentation (tracked)
-# FLOW.md, TODO.md, and CLAUDE.md are tracked in git
+# FLOW.md and TODO.md are tracked in git
+# CLAUDE.md is for local use only
+CLAUDE.md
