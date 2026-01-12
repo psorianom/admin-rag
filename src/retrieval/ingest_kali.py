@@ -14,6 +14,8 @@ import torch
 from pathlib import Path
 from typing import List, Dict
 from haystack import Document, Pipeline
+from haystack.lazy_imports import LazyImport
+from haystack.utils.auth import Secret
 from haystack.components.embedders import SentenceTransformersDocumentEmbedder
 from haystack.components.writers import DocumentWriter
 from haystack.utils.device import ComponentDevice
@@ -101,15 +103,17 @@ def create_qdrant_store(collection_name: str, embedding_dim: int = 1024) -> Qdra
         url = conn_config["url"]
         api_key = conn_config["api_key"]
         print(f"Using Qdrant Cloud: {url}")
+        # Wrap API key in Secret for cloud
+        api_key_secret = Secret.from_token(api_key) if api_key else None
     else:
         conn_config = config["local"]
         url = conn_config["url"]
-        api_key = conn_config.get("api_key")
+        api_key_secret = None  # No API key needed for local
         print(f"Using Local Qdrant: {url}")
 
     document_store = QdrantDocumentStore(
         url=url,
-        api_key=api_key,
+        api_key=api_key_secret,
         index=collection_name,
         embedding_dim=embedding_dim,
         recreate_index=True,  # Recreate collection if exists
