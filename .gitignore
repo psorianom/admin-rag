@@ -38,6 +38,7 @@ data/*.zip
 # Environment
 .env
 .venv
+.sesskey
 
 # Config with secrets
 config/qdrant_config.json

@@ -16,8 +16,9 @@ from typing import List, Dict, Optional
 from haystack import Pipeline, Document
 from haystack.utils.auth import Secret
 from haystack_integrations.document_stores.qdrant import QdrantDocumentStore
-from haystack.components.retrievers.qdrant import QdrantEmbeddingRetriever
-from sentence_transformers import SentenceTransformer
+from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever
+from optimum.onnxruntime import ORTModelForCustomTasks
+from transformers import AutoTokenizer
 from src.config.constants import QDRANT_CONFIG
 
 
@@ -26,13 +27,46 @@ _document_stores = {}
 _embedder = None
 
 
-def get_embedder() -> SentenceTransformer:
-    """Get or initialize the BGE-M3 embedder."""
+def get_embedder():
+    """Get or initialize the BGE-M3 ONNX int8 quantized embedder (700MB, 60ms latency)."""
     global _embedder
     if _embedder is None:
-        print("Loading BGE-M3 embedder (first load only)...")
-        _embedder = SentenceTransformer("BAAI/bge-m3")
+        print("Loading BGE-M3 ONNX int8 quantized model (first load only)...")
+        _embedder = {
+            "model": ORTModelForCustomTasks.from_pretrained("gpahal/bge-m3-onnx-int8"),
+            "tokenizer": AutoTokenizer.from_pretrained("BAAI/bge-m3")
+        }
     return _embedder
+
+
+def encode_query(query: str, embedder: dict) -> list:
+    """Encode query to 1024-dim embedding using ONNX BGE-M3 model.
+
+    BGE-M3 outputs:
+    - dense_vecs: Dense embeddings (1024-dim) - what we use for semantic search
+    - sparse_vecs: Sparse embeddings (for hybrid search)
+    - colbert_vecs: ColBERT-style embeddings
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        inputs = embedder["tokenizer"]([query], padding=True, truncation=True, return_tensors="np")
+        outputs = embedder["model"](**inputs)
+
+        # BGE-M3 ONNX model outputs dense_vecs directly
+        if isinstance(outputs, dict) and 'dense_vecs' in outputs:
+            embedding = outputs['dense_vecs'][0]  # First (and only) item in batch
+            logger.debug(f"Encoded query to {len(embedding)}-dim embedding")
+            return embedding.tolist()
+        else:
+            available_keys = outputs.keys() if isinstance(outputs, dict) else type(outputs)
+            error_msg = f"Unexpected ONNX output format. Available keys: {available_keys}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+    except Exception as e:
+        logger.error(f"Failed to encode query: {e}", exc_info=True)
+        raise
 
 
 def get_document_store(collection_name: str) -> QdrantDocumentStore:
@@ -115,9 +149,9 @@ def retrieve(
     print(f"\nQuerying collection: {collection_name}")
     print(f"Query: {query}")
     print(f"Top-k: {top_k}")
-    print(f"Method: Semantic search (BGE-M3 embeddings)")
+    print(f"Method: Semantic search (BGE-M3 ONNX int8 embeddings)")
 
-    query_embedding = embedder.encode(query).tolist()
+    query_embedding = encode_query(query, embedder)
 
     # Run retrieval
     result = pipeline.run({

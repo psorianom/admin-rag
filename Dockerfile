@@ -1,38 +1,47 @@
 # Lambda function with Retrieval API + BGE-M3 embeddings
 # CPU-only (no CUDA) for Lambda environment
+# Using standard Python image (not Lambda-specific) for better build compatibility
+# The final artifact can still be deployed to Lambda
 
-FROM public.ecr.aws/lambda/python:3.11
+FROM python:3.11-slim
 
-# Install system dependencies
-RUN yum install -y gcc-c++ make && yum clean all
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only PyTorch FIRST (before Poetry) to avoid CUDA dependencies
+# Create Lambda task root (mimic Lambda structure)
+ENV LAMBDA_TASK_ROOT=/var/task
+RUN mkdir -p ${LAMBDA_TASK_ROOT}
+
+# Install CPU-only PyTorch FIRST to avoid CUDA dependencies
 RUN pip install --no-cache-dir \
     torch --index-url https://download.pytorch.org/whl/cpu
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry
+# Install Poetry and export plugin
+RUN pip install --no-cache-dir poetry poetry-plugin-export
 
-# Copy project files
-COPY pyproject.toml ${LAMBDA_TASK_ROOT}/
+# Copy Poetry config files
+COPY pyproject.toml poetry.lock ${LAMBDA_TASK_ROOT}/
 
 # Set working directory
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Configure Poetry to not create virtualenvs (we're in a container)
-# Install remaining dependencies (torch already installed above)
-RUN poetry config virtualenvs.create false && \
-    poetry install --only main --no-interaction --no-root && \
-    rm -rf ~/.cache/pip && \
-    rm -rf ~/.cache/pypoetry/artifacts && \
-    rm -rf ~/.cache/pypoetry/cache
+# Export lambda group dependencies, filter CUDA packages, and install
+# Filter out nvidia-* packages and torch (already installed as CPU-only)
+RUN poetry export --only lambda --without-hashes -o requirements.txt && \
+    grep -v "nvidia-" requirements.txt | grep -v "^torch==" > requirements-cpu.txt && \
+    pip install --no-cache-dir -r requirements-cpu.txt && \
+    rm -rf ~/.cache/pip requirements.txt requirements-cpu.txt
 
-# Copy application code
-COPY src/retrieval/app.py ${LAMBDA_TASK_ROOT}/
+# Pre-download ONNX BGE-M3 model (~700MB) to avoid runtime downloads
+RUN python -c "from optimum.onnxruntime import ORTModelForCustomTasks; from transformers import AutoTokenizer; ORTModelForCustomTasks.from_pretrained('gpahal/bge-m3-onnx-int8'); AutoTokenizer.from_pretrained('BAAI/bge-m3')"
 
-# Copy retrieval module and config
-COPY src/retrieval/ ${LAMBDA_TASK_ROOT}/retrieval/
-COPY config/ ${LAMBDA_TASK_ROOT}/config/
+# Copy entire project
+COPY . ${LAMBDA_TASK_ROOT}/
+
+# Set working directory
+WORKDIR ${LAMBDA_TASK_ROOT}
 
 # Set Lambda handler
 CMD ["app.lambda_handler"]

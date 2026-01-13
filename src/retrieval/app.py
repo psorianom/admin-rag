@@ -2,14 +2,16 @@
 FastHTML web UI for testing retrieval pipeline.
 """
 
+import logging
 from fasthtml.common import *
-from pathlib import Path
-import sys
+from src.retrieval.retrieve import retrieve
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from retrieval.retrieve import retrieve
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app, rt = fast_app()
 
@@ -228,6 +230,7 @@ def post(query: str, collection: str, top_k: int = 10, convention: str = "all"):
         )
 
     except Exception as e:
+        logger.error(f"Search failed: {e}", exc_info=True)
         return Div(
             H3("Error", style="color: red;"),
             P(str(e)),
@@ -243,10 +246,11 @@ async def lambda_handler(event, context):
 
 
 if __name__ == "__main__":
+    import uvicorn
     print("="*80)
     print("Starting Admin-RAG Web UI")
     print("="*80)
     print("\nOpen your browser to: http://localhost:5001")
     print("\nPress Ctrl+C to stop")
     print("="*80)
-    serve(port=5001, reload=False)
+    uvicorn.run(app, host='0.0.0.0', port=5001)

@@ -26,6 +26,7 @@ tqdm = "^4.66.0"
 dill = "^0.4.0"
 datasets = "^4.4.2"
 python-fasthtml = "^0.12.39"
+mangum = "^0.17.0"  # ASGI adapter for AWS Lambda
 optimum = {extras = ["onnxruntime"], version = "^2.1.0"}
 onnxruntime = "^1.23.2"
 transformers = "^4.57.3"
@@ -37,6 +38,24 @@ ipykernel = "^6.0.0"
 black = "^24.0.0"
 ruff = "^0.1.0"
 vastai = "^0.2.0"  # For automated vast.ai GPU provisioning
+
+[tool.poetry.group.lambda.dependencies]
+# Lambda deployment dependencies (CPU-only, no CUDA)
+# Uses ONNX int8 quantized BGE-M3 model (~700MB) instead of full sentence-transformers
+# torch installed separately from CPU index in Dockerfile
+haystack-ai = "^2.0.0"
+qdrant-haystack = "^9.5.0"
+python-fasthtml = "^0.12.0"
+mangum = "^0.17.0"
+python-dotenv = "^1.0.0"
+pydantic = "^2.0.0"
+lxml = "^5.0.0"
+beautifulsoup4 = "^4.12.0"
+tqdm = "^4.66.0"
+optimum = {extras = ["onnxruntime"], version = "^2.1.0"}
+onnxruntime = "^1.23.0"
+transformers = "^4.57.0"
+numpy = "^2.0.0"
 
 [build-system]
 requires = ["poetry-core"]

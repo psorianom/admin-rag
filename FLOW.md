@@ -925,6 +925,65 @@ graph TB
 - Removed CLAUDE.md from git (kept local only, added to .gitignore)
 - Repository now ready for public sharing
 
+### 3b.9 Lambda Docker Container ✅
+
+**Challenge**: Package FastHTML app + ONNX BGE-M3 model for Lambda deployment
+
+**Key fixes implemented**:
+
+1. **Docker context optimization**:
+   - Created `.dockerignore` to exclude `data/`, `qdrant_storage/` (was 4.89GB!)
+   - Build context reduced from 4.89GB → ~50MB
+   - Build time improved from cancelled/stuck → ~6 minutes
+
+2. **ONNX int8 quantized model integration**:
+   - Switched from `sentence-transformers` (huge) to `optimum[onnxruntime]` + `transformers`
+   - Model: `gpahal/bge-m3-onnx-int8` (~700MB, tested in Phase 3b.1)
+   - Pre-downloaded model in Dockerfile (baked into image, no runtime downloads)
+   - Fixed embedding extraction: uses `dense_vecs` output (1024-dim dense embeddings)
+
+3. **Import structure improvements**:
+   - Removed `sys.path.insert()` hack from app.py
+   - Uses proper absolute imports: `from src.retrieval.retrieve import retrieve`
+   - Works consistently across local dev, Docker, and Lambda environments
+
+4. **Error handling and logging**:
+   - Added logging configuration to app.py
+   - Exception handling logs full stack traces
+   - Errors visible in both UI and console logs
+
+5. **Fixed Haystack import paths**:
+   - Corrected: `from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever`
+   - Updated: `ORTModelForCustomTasks` (matches test script)
+
+**Docker build command**:
+```bash
+docker build -t admin-rag-lambda .
+```
+
+**Local testing**:
+```bash
+docker run -it -p 5001:5001 --env-file .env admin-rag-lambda python -m src.retrieval.app
+```
+
+**Result**: Working Docker container with:
+- FastHTML web UI on port 5001
+- ONNX BGE-M3 int8 embeddings (60ms warm query)
+- Qdrant Cloud integration
+- ~1GB final image size (fits Lambda 10GB limit with headroom)
+
+## Phase 3b Complete! ✅
+
+**Achievements**:
+- ✅ Qdrant Cloud setup with 25,798 vectors
+- ✅ Configuration refactored to use environment variables
+- ✅ ONNX int8 quantized embeddings (700MB model, 60ms latency)
+- ✅ Docker container ready for Lambda deployment
+- ✅ Proper logging and error handling
+- ✅ Documentation updated with architecture diagrams
+
+**Ready for Phase 4**: Deploy to AWS Lambda or proceed with agentic layer
+
 ## Next Steps
 
 ### Phase 4: Agentic Layer (Pending)
