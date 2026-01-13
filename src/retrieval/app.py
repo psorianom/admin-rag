@@ -84,7 +84,7 @@ def get():
         "Admin-RAG Search",
         Div(
             H2("French Labor Law Search"),
-            P("Search the Code du travail and KALI conventions using BM25 keyword retrieval.",
+            P("Search the Code du travail and KALI conventions using semantic search (BGE-M3 ONNX int8 embeddings).",
               style="color: #666; margin-bottom: 24px;"),
 
             Form(
@@ -224,7 +224,7 @@ def post(query: str, collection: str, top_k: int = 10, convention: str = "all"):
 
         return Div(
             H3(f"Found {len(results)} results{filter_info}"),
-            P(f"Query: \"{query}\" | Collection: {collection} | Method: BM25",
+            P(f"Query: \"{query}\" | Collection: {collection} | Method: Semantic Search (BGE-M3 ONNX int8)",
               style="color: #666; margin-bottom: 16px;"),
             *[result_card(r, i) for i, r in enumerate(results, 1)]
         )
