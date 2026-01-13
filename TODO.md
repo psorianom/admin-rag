@@ -204,23 +204,35 @@ Deploy production-ready system on AWS serverless stack (€0/month).
 - [x] **Set up Qdrant Cloud**
   - Free tier account created
   - Cluster URL: https://0444a90a-65a9-4e85-979a-adf963861027.eu-west-2-0.aws.cloud.qdrant.io:6333
-  - API key: (in config/qdrant_config.json)
+  - Configuration via .env file (credentials not in git)
   - Ready to ingest: 1GB limit, 523MB for our 25,798 vectors
 
-### Next Tasks (In Order)
-- [ ] **Run ingestion scripts to populate Qdrant Cloud**
-  ```bash
-  poetry run python src/retrieval/ingest_code_travail.py
-  poetry run python src/retrieval/ingest_kali.py
-  ```
-  - Loads JSONL files with pre-computed embeddings
-  - Creates collections in Qdrant Cloud
-  - Takes ~5-10 minutes total
+- [x] **Refactor configuration to use environment variables**
+  - Created .env.template for local development
+  - Created src/config/constants.py to load from .env
+  - Updated all scripts (ingest_code_travail.py, ingest_kali.py, retrieve.py)
+  - Added config/qdrant_config.json to .gitignore
+  - Security: Secrets now in .env (not committed to git)
 
+- [x] **Ingest vectors to Qdrant Cloud**
+  - Code du travail: 11,644 chunks uploaded
+  - KALI: 14,154 chunks uploaded
+  - Total: 25,798 vectors in cloud (523MB/1GB used)
+  - Both collections live and ready for queries
+
+- [x] **Documentation improvements**
+  - Enhanced README with architecture diagrams and design decisions
+  - Added mermaid diagrams to FLOW.md (pipeline, workflow, architecture)
+  - Removed CLAUDE.md from repo (kept local only)
+  - Added .env setup instructions to README
+
+### Next Tasks (In Order)
 - [ ] **Build Docker image locally**
   ```bash
   docker build -t admin-rag-retrieval .
   ```
+  - Verify CPU-only PyTorch installation works
+  - Check image size (should be <2GB for Lambda)
 
 - [ ] **Deploy to AWS Lambda**
   - Run Terraform: `cd terraform && terraform init && terraform plan && terraform apply`

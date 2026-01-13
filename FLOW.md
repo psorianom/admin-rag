@@ -866,11 +866,64 @@ graph TB
 
 **Account created** with free tier:
 - Cluster URL: `https://0444a90a-65a9-4e85-979a-adf963861027.eu-west-2-0.aws.cloud.qdrant.io:6333`
-- API Key: (configured in `config/qdrant_config.json`)
+- API Key: (configured in .env file)
 - Storage: 1GB limit (523MB used by 25,798 vectors)
 - Cost: €0/month
 
-**Ready for**: Ingestion from local JSONL files with pre-computed embeddings
+### 3b.6 Configuration Refactoring ✅
+
+**Problem**: Configuration with secrets in JSON file committed to git
+
+**Solution**: Migrated to environment variables
+- Created `.env.template` with placeholder values (safe to commit)
+- Created `src/config/constants.py` to load from `.env` using python-dotenv
+- Updated all scripts to import from constants module:
+  - `src/retrieval/ingest_code_travail.py`
+  - `src/retrieval/ingest_kali.py`
+  - `src/retrieval/retrieve.py`
+- Added `config/qdrant_config.json` to `.gitignore`
+- Created `config/qdrant_config.json.template` for reference
+
+**Benefits**:
+- Secrets never committed to git
+- Easy local/cloud switching via QDRANT_TYPE env var
+- Standard practice for production deployments
+- Works seamlessly with Docker (env injection)
+
+### 3b.7 Qdrant Cloud Ingestion ✅
+
+**Vectors uploaded**:
+- Code du travail: 11,644 chunks (took ~43 seconds)
+- KALI: 14,154 chunks (took ~64 seconds)
+- Total: 25,798 vectors in cloud (523MB/1GB used)
+
+**Both collections live and ready for queries**
+
+### 3b.8 Documentation Enhancements ✅
+
+**README.md**:
+- Added ASCII architecture diagram showing data flow
+- Added detailed design decisions with reasoning:
+  - Separate collections vs merged
+  - Semantic chunking vs fixed windows
+  - Config-based Qdrant connection
+  - BGE-M3 embeddings
+  - Lambda deployment vs EC2
+  - Vast.ai for embeddings
+- Added status markers (Complete, In Progress, Coming Soon)
+- Added .env setup instructions
+- Removed all emojis for professional presentation
+
+**FLOW.md**:
+- Added mermaid diagrams:
+  - Data pipeline flow (Phase 1)
+  - Vast.ai automation workflow (Phase 2)
+  - Ingestion pipeline architecture (Phase 2)
+  - Semantic search retrieval pipeline (Phase 3)
+
+**Repository cleanup**:
+- Removed CLAUDE.md from git (kept local only, added to .gitignore)
+- Repository now ready for public sharing
 
 ## Next Steps
 
