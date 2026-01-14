@@ -82,7 +82,10 @@ def load_chunks(jsonl_path: Path) -> tuple[List[Document], bool]:
 
 
 def create_qdrant_store(collection_name: str, embedding_dim: int = 1024) -> QdrantDocumentStore:
-    """Create and configure Qdrant document store (local or cloud)."""
+    """Create and configure Qdrant document store (local or cloud) with proper indexes."""
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import VectorParams, Distance, KeywordIndexParams
+
     config = QDRANT_CONFIG
     qdrant_type = config.get("type", "local")
 
@@ -93,18 +96,53 @@ def create_qdrant_store(collection_name: str, embedding_dim: int = 1024) -> Qdra
         print(f"Using Qdrant Cloud: {url}")
         # Wrap API key in Secret for cloud
         api_key_secret = Secret.from_token(api_key) if api_key else None
+        # Also create direct client for collection setup
+        client = QdrantClient(url=url, api_key=api_key)
     else:
         conn_config = config["local"]
         url = conn_config["url"]
         api_key_secret = None  # No API key needed for local
         print(f"Using Local Qdrant: {url}")
+        client = QdrantClient(url=url)
 
+    # Delete existing collection if it exists (to recreate with new schema)
+    try:
+        client.delete_collection(collection_name)
+        print(f"   Deleted existing collection '{collection_name}'")
+    except Exception:
+        pass  # Collection doesn't exist yet
+
+    # Create collection
+    print(f"   Creating collection '{collection_name}'...")
+    client.create_collection(
+        collection_name=collection_name,
+        vectors_config=VectorParams(
+            size=embedding_dim,
+            distance=Distance.COSINE
+        )
+    )
+    print(f"   ✅ Collection created")
+
+    # Create keyword indexes for filtering (on nested meta fields)
+    print(f"   Creating indexes...")
+    for field in ["meta.idcc", "meta.convention_name", "meta.source", "meta.article_num"]:
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field,
+                field_schema=KeywordIndexParams(type="keyword")
+            )
+            print(f"   ✅ Indexed: {field}")
+        except Exception as e:
+            print(f"   ⚠️  Index creation for {field}: {e}")
+
+    # Now create Haystack document store
     document_store = QdrantDocumentStore(
         url=url,
         api_key=api_key_secret,
         index=collection_name,
         embedding_dim=embedding_dim,
-        recreate_index=True,  # Recreate collection if exists
+        recreate_index=False,  # Don't recreate, we just created it above
         return_embedding=True,
         wait_result_from_api=True,
     )
@@ -226,8 +264,9 @@ def main():
     print("\n" + "="*80)
     print("Ingestion Complete!")
     print("="*80)
-    config = load_qdrant_config()
-    qdrant_url = config[config.get("type", "local")]["url"]
+    config = QDRANT_CONFIG
+    qdrant_type = config.get("type", "local")
+    qdrant_url = config[qdrant_type]["url"]
     print(f"Collection: kali")
     print(f"Documents indexed: {len(documents):,}")
     print(f"Conventions: {len(convention_counts)}")

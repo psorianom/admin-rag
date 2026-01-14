@@ -13,6 +13,7 @@ This script:
 import json
 from pathlib import Path
 from typing import List, Dict, Optional
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 from haystack import Pipeline, Document
 from haystack.utils.auth import Secret
 from haystack_integrations.document_stores.qdrant import QdrantDocumentStore
@@ -149,11 +150,15 @@ def retrieve(
     print(f"\nQuerying collection: {collection_name}")
     print(f"Query: {query}")
     print(f"Top-k: {top_k}")
+    print(f"Filters: {filters}")
     print(f"Method: Semantic search (BGE-M3 ONNX int8 embeddings)")
 
     query_embedding = encode_query(query, embedder)
 
     # Run retrieval
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"DEBUG: Running retrieval with filters={filters}")
     result = pipeline.run({
         "retriever": {"query_embedding": query_embedding, "top_k": top_k, "filters": filters}
     })
@@ -262,7 +267,7 @@ def main():
     print(f"Filter: IDCC = 1486 (Syntec)")
 
     # Filter for Syntec convention (IDCC 1486)
-    syntec_filter = {"field": "idcc", "operator": "==", "value": "1486"}
+    syntec_filter = Filter(must=[FieldCondition(key="meta.idcc", match=MatchValue(value="1486"))])
 
     results = retrieve(query, collection_name="kali", top_k=5, filters=syntec_filter)
     for i, result in enumerate(results[:3], 1):
@@ -278,7 +283,7 @@ def main():
     print(f"Collection: kali")
     print(f"Filter: IDCC = 1979 (Hotels, cafés, restaurants)")
 
-    hcr_filter = {"field": "idcc", "operator": "==", "value": "1979"}
+    hcr_filter = Filter(must=[FieldCondition(key="meta.idcc", match=MatchValue(value="1979"))])
 
     results = retrieve(query, collection_name="kali", top_k=5, filters=hcr_filter)
     for i, result in enumerate(results[:3], 1):

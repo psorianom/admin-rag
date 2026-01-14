@@ -84,12 +84,17 @@ class RoutingAgent:
         Returns:
             RoutingDecision with strategy, collections, and optional IDCC
         """
-        logger.info(f"Routing query: {query}")
+        logger.info(f"\n{'='*80}\nROUTING AGENT\n{'='*80}")
+        logger.info(f"📥 Input query: \"{query}\"")
 
         # Call LLM for routing decision
         try:
             decision = self._llm_route(query)
-            logger.info(f"Routing decision: {decision}")
+            logger.info(f"📊 Strategy: {decision.strategy}")
+            logger.info(f"📦 Collections: {decision.collections}")
+            logger.info(f"🏢 IDCC: {decision.idcc}")
+            logger.info(f"💡 Reasoning: {decision.reasoning}")
+            logger.info(f"{'='*80}\n")
             return decision
         except Exception as e:
             logger.error(f"LLM routing failed: {e}, falling back to code_travail only")

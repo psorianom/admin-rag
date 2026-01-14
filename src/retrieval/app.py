@@ -191,6 +191,8 @@ def get(collection: str = "code_travail"):
 @rt("/search")
 def post(query: str, top_k: int = 10):
     """Handle search request with intelligent routing."""
+    logger.info(f"\n{'='*80}\nWEB UI /search REQUEST\n{'='*80}")
+    logger.info(f"Query: \"{query}\" | Top-K: {top_k}")
     if not query or not query.strip():
         return Div(
             P("Please enter a search query.", style="color: red;"),
@@ -218,6 +220,9 @@ def post(query: str, top_k: int = 10):
         routing_info = f"Strategy: {decision.strategy}"
         if decision.idcc:
             routing_info += f" | Convention: IDCC {decision.idcc}"
+
+        logger.info(f"\n✅ FINAL RESULT: {len(results)} results returned")
+        logger.info(f"{'='*80}\n")
 
         return Div(
             H3(f"Found {len(results)} results"),
