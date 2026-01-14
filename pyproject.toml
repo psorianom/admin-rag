@@ -19,6 +19,9 @@ qdrant-haystack = "^9.5.0"
 sentence-transformers = "^3.0.0"
 tqdm = "^4.66.0"
 
+# LLM for routing agent
+openai = "^1.0.0"
+
 # Optional dependencies - uncomment as needed
 # weaviate-haystack = "^1.0.0"
 # anthropic-haystack = "^1.0.0"
@@ -56,6 +59,7 @@ optimum = {extras = ["onnxruntime"], version = "^2.1.0"}
 onnxruntime = "^1.23.0"
 transformers = "^4.57.0"
 numpy = "^2.0.0"
+openai = "^1.0.0"  # LLM for routing agent
 
 [build-system]
 requires = ["poetry-core"]

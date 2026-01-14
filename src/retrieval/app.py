@@ -5,6 +5,8 @@ FastHTML web UI for testing retrieval pipeline.
 import logging
 from fasthtml.common import *
 from src.retrieval.retrieve import retrieve
+from src.agents.routing_agent import get_routing_agent
+from src.agents.multi_retriever import retrieve_with_routing
 
 # Configure logging
 logging.basicConfig(
@@ -187,27 +189,23 @@ def get(collection: str = "code_travail"):
 
 
 @rt("/search")
-def post(query: str, collection: str, top_k: int = 10, convention: str = "all"):
-    """Handle search request."""
+def post(query: str, top_k: int = 10):
+    """Handle search request with intelligent routing."""
     if not query or not query.strip():
         return Div(
             P("Please enter a search query.", style="color: red;"),
             style="padding: 16px;"
         )
 
-    # Build filters
-    filters = None
-    if collection == "kali" and convention != "all":
-        filters = {"field": "idcc", "operator": "==", "value": convention}
-
-    # Run retrieval
     try:
-        results = retrieve(
-            query=query.strip(),
-            collection_name=collection,
-            top_k=int(top_k),
-            filters=filters
-        )
+        # Step 1: Route query
+        routing_agent = get_routing_agent()
+        decision = routing_agent.route(query.strip())
+
+        logger.info(f"Routing decision: {decision}")
+
+        # Step 2: Retrieve from routed collections
+        results = retrieve_with_routing(query.strip(), decision, top_k=int(top_k))
 
         if not results:
             return Div(
@@ -216,16 +214,16 @@ def post(query: str, collection: str, top_k: int = 10, convention: str = "all"):
                 style="padding: 16px;"
             )
 
-        # Format results
-        filter_info = ""
-        if filters:
-            conv_name = CONVENTIONS.get(convention, convention)
-            filter_info = f" (filtered: {conv_name})"
+        # Step 3: Format results with routing info
+        routing_info = f"Strategy: {decision.strategy}"
+        if decision.idcc:
+            routing_info += f" | Convention: IDCC {decision.idcc}"
 
         return Div(
-            H3(f"Found {len(results)} results{filter_info}"),
-            P(f"Query: \"{query}\" | Collection: {collection} | Method: Semantic Search (BGE-M3 ONNX int8)",
-              style="color: #666; margin-bottom: 16px;"),
+            H3(f"Found {len(results)} results"),
+            P(f"Query: \"{query}\"", style="color: #666; margin-bottom: 4px;"),
+            P(f"Agent decision: {routing_info}", style="color: #0066cc; margin-bottom: 4px; font-size: 0.9em;"),
+            P(f"Reasoning: {decision.reasoning}", style="color: #666; margin-bottom: 16px; font-size: 0.9em; font-style: italic;"),
             *[result_card(r, i) for i, r in enumerate(results, 1)]
         )
 
