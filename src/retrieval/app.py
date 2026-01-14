@@ -18,18 +18,6 @@ logger = logging.getLogger(__name__)
 
 app, rt = fast_app()
 
-# Available conventions
-CONVENTIONS = {
-    "all": "All conventions",
-    "1486": "Syntec (IT services, consulting)",
-    "3248": "Métallurgie",
-    "1979": "HCR (Hotels, cafés, restaurants)",
-    "1597": "Bâtiment (Construction)",
-    "1090": "Services de l'automobile",
-    "2216": "Commerce alimentaire",
-    "2120": "Banque",
-}
-
 
 def format_metadata(meta):
     """Format metadata for display."""
@@ -140,25 +128,6 @@ def get():
                     style="margin-bottom: 16px;"
                 ),
 
-                # Collection selector
-                Div(
-                    Label("Collection:", style="display: block; margin-bottom: 4px; font-weight: bold;"),
-                    Select(
-                        Option("Code du travail", value="code_travail"),
-                        Option("KALI (Conventions)", value="kali"),
-                        name="collection",
-                        id="collection-select",
-                        style="padding: 8px; font-size: 14px;",
-                        hx_get="/convention_selector",
-                        hx_target="#convention-filter",
-                        hx_swap="innerHTML"
-                    ),
-                    style="margin-bottom: 16px;"
-                ),
-
-                # Convention filter (shown only for KALI)
-                Div(id="convention-filter", style="margin-bottom: 16px;"),
-
                 # Top-k selector
                 Div(
                     Label("Number of results:", style="display: block; margin-bottom: 4px; font-weight: bold;"),
@@ -206,22 +175,6 @@ def get():
             Div(id="results", style="margin-top: 32px;"),
 
             style="max-width: 900px; margin: 0 auto; padding: 20px;"
-        )
-    )
-
-
-@rt("/convention_selector")
-def get(collection: str = "code_travail"):
-    """Return convention filter dropdown (only for KALI)."""
-    if collection != "kali":
-        return ""
-
-    return Div(
-        Label("Convention (optional):", style="display: block; margin-bottom: 4px; font-weight: bold;"),
-        Select(
-            *[Option(name, value=code) for code, name in CONVENTIONS.items()],
-            name="convention",
-            style="padding: 8px; font-size: 14px; width: 100%;"
         )
     )
 
