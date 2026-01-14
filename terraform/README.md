@@ -10,14 +10,34 @@ This directory contains Terraform configuration for deploying Admin-RAG to AWS L
 
 ## Files Overview
 
-| File | Purpose |
-|------|---------|
-| `provider.tf` | AWS provider configuration (region: eu-west-3) |
-| `variables.tf` | Lambda settings (memory: 10GB, timeout: 30s, name) |
-| `iam.tf` | IAM role and permissions for Lambda |
-| `lambda.tf` | Lambda function + ECR repository |
-| `api_gateway.tf` | Public HTTP endpoint for Lambda |
-| `outputs.tf` | Display API URL, ECR URL, Lambda name |
+| File | Purpose | Dependencies |
+|------|---------|--------------|
+| `provider.tf` | AWS provider configuration (region: eu-west-3) | None (foundation) |
+| `variables.tf` | Lambda settings (memory: 10GB, timeout: 30s, name) | provider.tf |
+| `iam.tf` | IAM role and permissions for Lambda | variables.tf |
+| `lambda.tf` | Lambda function + ECR repository | iam.tf |
+| `api_gateway.tf` | Public HTTP endpoint for Lambda | lambda.tf |
+| `outputs.tf` | Display API URL, ECR URL, Lambda name | lambda.tf, api_gateway.tf |
+
+### Execution Order
+
+When writing Terraform files from scratch, build them in this order (each depends on the previous):
+
+```
+1. provider.tf          (AWS foundation)
+   ↓
+2. variables.tf         (Input configuration)
+   ↓
+3. iam.tf               (Lambda IAM role)
+   ↓
+4. lambda.tf            (Lambda + ECR)
+   ↓
+5. api_gateway.tf       (HTTP endpoint)
+   ↓
+6. outputs.tf           (Display results)
+```
+
+Each file only references what was created in previous steps. This ensures no circular dependencies and clean infrastructure layering.
 
 ## Deployment Steps
 
