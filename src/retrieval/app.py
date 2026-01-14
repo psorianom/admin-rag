@@ -1,5 +1,5 @@
 """
-FastHTML web UI for testing retrieval pipeline.
+FastHTML web UI for testing retrieval pipeline with answer generation.
 """
 
 import logging
@@ -7,6 +7,7 @@ from fasthtml.common import *
 from src.retrieval.retrieve import retrieve
 from src.agents.routing_agent import get_routing_agent
 from src.agents.multi_retriever import retrieve_with_routing
+from src.agents.answer_generator import get_answer_generator
 
 # Configure logging
 logging.basicConfig(
@@ -50,14 +51,17 @@ def format_metadata(meta):
     return Div(*[P(p, style="margin: 2px 0; font-size: 0.9em; color: #000;") for p in parts])
 
 
-def result_card(result, rank):
-    """Create a card for a search result."""
+def result_card(result, rank, highlighted=False):
+    """Create a card for a search result with optional citation highlighting."""
     meta = result['metadata']
     content = result['content']
     score = result['score']
 
     # Truncate content
     preview = content[:400] + "..." if len(content) > 400 else content
+
+    # Blue left border if cited in answer
+    border_style = "3px solid #007bff" if highlighted else "1px solid #ddd"
 
     return Article(
         Div(
@@ -68,14 +72,48 @@ def result_card(result, rank):
         format_metadata(meta),
         Hr(),
         P(preview, style="white-space: pre-wrap; line-height: 1.5; color: #000;"),
-        style="""
-            border: 1px solid #ddd;
+        style=f"""
+            border-left: {border_style};
             padding: 16px;
             margin: 16px 0;
             border-radius: 8px;
             background: #fff;
             color: #000;
         """
+    )
+
+
+def answer_section(answer):
+    """Display generated answer with reasoning."""
+    return Div(
+        H2("Réponse"),
+        P(answer.answer, style="font-size: 16px; line-height: 1.6; color: #333; margin-bottom: 12px;"),
+        P(
+            f"Raisonnement: {answer.reasoning}",
+            style="color: #666; font-size: 14px; font-style: italic;"
+        ),
+        style="background: #f9f9f9; padding: 20px; border-left: 4px solid #007bff; margin-bottom: 24px; border-radius: 4px;"
+    )
+
+
+def confidence_badge(confidence):
+    """Display confidence score with color coding."""
+    if confidence >= 0.8:
+        color = "#28a745"
+        label = "Haute"
+    elif confidence >= 0.6:
+        color = "#ffc107"
+        label = "Moyenne"
+    else:
+        color = "#dc3545"
+        label = "Basse"
+
+    return Div(
+        Span(
+            f"Confiance: {label} ({confidence:.0%})",
+            style=f"background: {color}; color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: bold;"
+        ),
+        style="margin-bottom: 20px;"
     )
 
 
@@ -216,20 +254,39 @@ def post(query: str, top_k: int = 10):
                 style="padding: 16px;"
             )
 
-        # Step 3: Format results with routing info
+        # Step 3: Generate answer from retrieved context
+        answer_gen = get_answer_generator()
+        answer = answer_gen.generate(query.strip(), results)
+
+        # Step 4: Format results with routing info
         routing_info = f"Strategy: {decision.strategy}"
         if decision.idcc:
             routing_info += f" | Convention: IDCC {decision.idcc}"
 
-        logger.info(f"\n✅ FINAL RESULT: {len(results)} results returned")
+        logger.info(f"\n✅ FINAL RESULT: {len(results)} results returned with answer")
         logger.info(f"{'='*80}\n")
 
+        # Build response with answer + sources
         return Div(
-            H3(f"Found {len(results)} results"),
-            P(f"Query: \"{query}\"", style="color: #666; margin-bottom: 4px;"),
-            P(f"Agent decision: {routing_info}", style="color: #0066cc; margin-bottom: 4px; font-size: 0.9em;"),
-            P(f"Reasoning: {decision.reasoning}", style="color: #666; margin-bottom: 16px; font-size: 0.9em; font-style: italic;"),
-            *[result_card(r, i) for i, r in enumerate(results, 1)]
+            # Answer section
+            answer_section(answer),
+            confidence_badge(answer.confidence),
+
+            # Query and routing info
+            P(f"Requête: \"{query}\"", style="color: #666; margin-bottom: 4px; font-size: 0.9em;"),
+            P(f"Décision agent: {routing_info}", style="color: #0066cc; margin-bottom: 16px; font-size: 0.9em;"),
+
+            # Sources header
+            H3(f"Sources ({len(results)} résultats)"),
+
+            # Results with citation highlighting
+            *[
+                result_card(
+                    r, i,
+                    highlighted=(i - 1) in answer.citation_indices
+                )
+                for i, r in enumerate(results, 1)
+            ]
         )
 
     except Exception as e:
