@@ -984,16 +984,138 @@ docker run -it -p 5001:5001 --env-file .env admin-rag-lambda python -m src.retri
 
 **Ready for Phase 4**: Deploy to AWS Lambda or proceed with agentic layer
 
+## Phase 4: Intelligent Routing Agent ✅
+
+### Overview
+Implemented intelligent query routing agent that:
+1. Detects convention-specific queries using OpenAI GPT-4o-mini
+2. Auto-maps job roles to IDCC conventions (e.g., "ingénieur informatique" → Syntec 1486)
+3. Routes queries to appropriate collections (code_travail, kali, or both)
+4. Applies IDCC metadata filtering for convention-specific results
+
+### Implementation Details
+
+**Routing Agent** (`src/agents/routing_agent.py`):
+- Uses OpenAI GPT-4o-mini with structured outputs (Pydantic validation)
+- Four routing strategies:
+  - `code_only`: General labor law questions
+  - `kali_only`: Convention-specific questions
+  - `both_code_first`: Check general law first, then convention
+  - `both_kali_first`: Convention is primary (more favorable rules)
+- Detects IDCC conventions from keywords in query
+- Deterministic (temperature=0) for consistent routing
+
+**Convention Mapping** (7 conventions indexed):
+- 1486: Syntec (IT services, consulting, engineering)
+- 3248: Métallurgie (Metallurgy)
+- 1979: HCR (Hotels, cafés, restaurants)
+- 1597: Bâtiment (Construction)
+- 1090: Automobile (Auto services)
+- 2216: Commerce alimentaire (Food retail)
+- 2120: Banque (Banking)
+
+**Multi-Collection Retrieval** (`src/agents/multi_retriever.py`):
+- Executes retrieval on specified collections in order
+- Applies IDCC metadata filtering using Qdrant's nested field indexes (`meta.idcc`)
+- Merges results from multiple collections
+- Sorts by score and returns top-k
+- Tags results with collection source and convention info
+
+**Fixed Qdrant Indexing**:
+- Recreated kali collection with proper nested field indexes
+- Indexes on: `meta.idcc`, `meta.convention_name`, `meta.source`, `meta.article_num`
+- Fixed issue where IDCC filtering returned 0 results
+
+**Web UI Updates** (`src/retrieval/app.py`):
+- Removed manual collection/convention selector
+- Integrated routing agent for automatic decisions
+- Displays agent's routing strategy and reasoning
+- Shows which convention (IDCC) was detected
+
+### Test Coverage
+
+**18 tests total** (18 passed, 1 skipped):
+
+**Routing Agent Tests** (8 tests):
+- ✅ Pydantic validation of routing decisions
+- ✅ General query routing (code_only)
+- ✅ IT engineer detection (Syntec 1486)
+- ✅ Explicit convention routing (kali_only)
+- ✅ Fallback on LLM error
+- ✅ Singleton pattern
+
+**Multi-Retriever Tests** (10 tests):
+- ✅ IDCC filtering with nested meta fields
+- ✅ Multi-collection merging and sorting
+- ✅ All four routing strategies
+- ✅ Result tagging with convention metadata
+- ✅ Empty result handling
+- ✅ Top-k limiting
+- ✅ Score-based sorting
+- ✅ Different IDCC values
+- ✅ Null IDCC handling
+
+### Example Queries (All French)
+
+**Query 1**: "Quelle est la durée du préavis de démission?"
+- Agent: Detects general legal question
+- Routing: `code_only`
+- Result: General labor law rules
+
+**Query 2**: "Période d'essai pour un ingénieur informatique"
+- Agent: Detects IT engineer + Syntec convention (IDCC 1486)
+- Routing: `both_kali_first` with IDCC=1486 filter
+- Result: Syntec rules (more favorable) + general law
+
+**Query 3**: "Convention Syntec congés payés"
+- Agent: Explicit convention mention
+- Routing: `kali_only` with IDCC=1486 filter
+- Result: Syntec-specific vacation rules
+
+**Query 4**: "Licenciement serveur restaurant"
+- Agent: Detects HCR worker (IDCC 1979)
+- Routing: `both_kali_first` with IDCC=1979 filter
+- Result: HCR convention + general dismissal law
+
+### Costs
+- **OpenAI GPT-4o-mini**: ~€0.000023 per query
+- **Monthly estimate** (1000 queries/day): ~€0.70
+
+### Files Changed
+- `src/agents/routing_agent.py` - Core routing logic (170 lines)
+- `src/agents/multi_retriever.py` - Multi-collection retrieval (76 lines)
+- `src/retrieval/app.py` - Updated FastHTML UI
+- `src/retrieval/ingest_kali.py` - Fixed IDCC indexing
+- `src/retrieval/retrieve.py` - Updated demo examples
+- `src/config/constants.py` - Added LLM config
+- `tests/test_routing_agent.py` - Routing tests
+- `tests/test_multi_retriever.py` - Retriever tests
+- `.env.template` - Added LLM_PROVIDER and OPENAI_* variables
+- `pyproject.toml` - Added openai dependency
+
+## Phase 4 Complete! ✅
+
+**Achievements**:
+- ✅ Intelligent routing agent using GPT-4o-mini
+- ✅ Auto-IDCC detection from job roles
+- ✅ Multi-collection retrieval with metadata filtering
+- ✅ 18 passing tests (routing + retrieval)
+- ✅ Fixed Qdrant nested field indexing
+- ✅ Production-ready cost (~€0.70/month for 1000 queries/day)
+- ✅ Full end-to-end testing verified
+
+**Ready for Phase 5**: Answer generation and citations
+
 ## Next Steps
 
-### Phase 4: Agentic Layer (Pending)
-- Multi-step reasoning with Claude/Mistral
-- Convention identification tool
-- Dual-source retrieval orchestration
-- Prompt engineering for French legal reasoning
+### Phase 5: Answer Generation & Citations (Pending)
+- Generate answers using GPT-4o-mini on retrieved context
+- Add citation system pointing to source articles
+- Implement confidence scoring
+- Enhance web UI with generated responses
 
-### Phase 5: Evaluation & Quality (Pending)
+### Phase 6: Evaluation & Quality (Pending)
 - Test dataset creation
-- Quality tuning
-- Citation system
-- Feedback collection
+- Quality metrics and benchmarking
+- User feedback collection
+- Fine-tuning for improved routing
