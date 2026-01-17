@@ -1,4 +1,4 @@
-.PHONY: help setup install-deps start-qdrant stop-qdrant parse-code-travail parse-kali parse ingest-code-travail ingest-kali ingest ingest-only all clean clean-qdrant clean-processed status terraform-init terraform-validate terraform-plan terraform-apply terraform-destroy
+.PHONY: help setup install-deps start-qdrant stop-qdrant parse-code-travail parse-kali parse ingest-code-travail ingest-kali ingest ingest-only all clean clean-qdrant clean-processed status terraform-init terraform-validate terraform-plan terraform-apply terraform-destroy docker-build docker-push deploy
 
 # Default target
 help:
@@ -32,6 +32,11 @@ help:
 	@echo "  make terraform-plan     - Preview AWS resources to be created"
 	@echo "  make terraform-apply    - Deploy infrastructure to AWS"
 	@echo "  make terraform-destroy  - Delete all AWS resources (destructive!)"
+	@echo ""
+	@echo "Docker & Deployment targets:"
+	@echo "  make docker-build       - Build Docker image with ECR tag"
+	@echo "  make docker-push        - Push Docker image to ECR"
+	@echo "  make deploy             - Full deployment: build → push → terraform apply"
 
 # Setup
 setup: install-deps start-qdrant
@@ -222,3 +227,33 @@ terraform-destroy:
 	@echo "   ⚠️  Confirm you want to proceed..."
 	cd terraform && terraform destroy
 	@echo "   ✅ Resources destroyed"
+
+# Docker: Build, Push, Deploy
+ECR_URL ?= 908027388369.dkr.ecr.eu-west-3.amazonaws.com/admin-rag-retrieval
+
+docker-build:
+	@echo "🐳 Building Docker image with ECR tag..."
+	@echo "   ECR_URL: $(ECR_URL)"
+	docker build -t $(ECR_URL):latest .
+	@echo "   ✅ Docker image built: $(ECR_URL):latest"
+
+docker-push:
+	@echo "🚀 Pushing Docker image to ECR..."
+	@echo "   Authenticating Docker to ECR..."
+	aws ecr get-login-password --region eu-west-3 | \
+		docker login --username AWS --password-stdin $$(echo $(ECR_URL) | cut -d/ -f1)
+	@echo "   Pushing image (this may take 1-2 minutes)..."
+	docker push $(ECR_URL):latest
+	@echo "   ✅ Docker image pushed to ECR"
+
+deploy: docker-build docker-push terraform-apply
+	@echo ""
+	@echo "🎉 Deployment complete!"
+	@echo "   ✅ Docker image built and pushed"
+	@echo "   ✅ Lambda function deployed"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Wait 1-2 minutes for Lambda to pull the image"
+	@echo "  2. Get your API endpoint from terraform output:"
+	@echo "     terraform output api_endpoint"
+	@echo "  3. Test with: curl <your-api-endpoint>"

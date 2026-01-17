@@ -75,3 +75,7 @@ def get_llm_config() -> dict:
 
 # Export LLM configuration
 LLM_CONFIG = get_llm_config()
+
+# Export API Gateway stage, if available
+# This allows the app to be aware of its path prefix (e.g., /prod)
+API_STAGE = os.getenv("API_STAGE", "")

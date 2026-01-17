@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  A local testing template for the admin-rag function.
+  This is NOT used for deployment, only for `sam local`.
+
+Resources:
+  AdminRagFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Architectures:
+        - x86_64
+      Timeout: 900 # 15 minute timeout for local debugging
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: any
+    Metadata:
+      DockerContext: ..
+      Dockerfile: Dockerfile

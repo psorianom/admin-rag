@@ -1,47 +1,48 @@
-# Lambda function with Retrieval API + BGE-M3 embeddings
-# CPU-only (no CUDA) for Lambda environment
-# Using standard Python image (not Lambda-specific) for better build compatibility
-# The final artifact can still be deployed to Lambda
+# FastHTML on Lambda using AWS Lambda Web Adapter
+FROM public.ecr.aws/docker/library/python:3.11-slim-bullseye
 
-FROM python:3.11-slim
+# Install Lambda Web Adapter as extension
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
 
-# Install build dependencies
+# Lambda has read-only filesystem except /tmp - redirect HOME for Haystack telemetry
+ENV HOME=/tmp
+# Disable Haystack telemetry completely (alternative approach)
+ENV HAYSTACK_TELEMETRY_ENABLED=False
+
+# Install build tools for packages with C extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Create Lambda task root (mimic Lambda structure)
-ENV LAMBDA_TASK_ROOT=/var/task
-RUN mkdir -p ${LAMBDA_TASK_ROOT}
+WORKDIR /app
 
-# Install CPU-only PyTorch FIRST to avoid CUDA dependencies
+# Install CPU-only PyTorch FIRST
 RUN pip install --no-cache-dir \
     torch --index-url https://download.pytorch.org/whl/cpu
 
-# Install Poetry and export plugin
+# Install Poetry
 RUN pip install --no-cache-dir poetry poetry-plugin-export
 
-# Copy Poetry config files
-COPY pyproject.toml poetry.lock ${LAMBDA_TASK_ROOT}/
+# Copy Poetry files
+COPY pyproject.toml poetry.lock ./
 
-# Set working directory
-WORKDIR ${LAMBDA_TASK_ROOT}
-
-# Export lambda group dependencies, filter CUDA packages, and install
-# Filter out nvidia-* packages and torch (already installed as CPU-only)
+# Export and install dependencies
 RUN poetry export --only lambda --without-hashes -o requirements.txt && \
     grep -v "nvidia-" requirements.txt | grep -v "^torch==" > requirements-cpu.txt && \
     pip install --no-cache-dir -r requirements-cpu.txt && \
-    rm -rf ~/.cache/pip requirements.txt requirements-cpu.txt
+    rm -rf requirements.txt requirements-cpu.txt
 
-# Pre-download ONNX BGE-M3 model (~700MB) to avoid runtime downloads
-RUN python -c "from optimum.onnxruntime import ORTModelForCustomTasks; from transformers import AutoTokenizer; ORTModelForCustomTasks.from_pretrained('gpahal/bge-m3-onnx-int8'); AutoTokenizer.from_pretrained('BAAI/bge-m3')"
+# Pre-download ONNX model and tokenizer to specific local paths
+# This avoids all caching and network issues at runtime.
+RUN python -c "from huggingface_hub import snapshot_download; \
+    snapshot_download(repo_id='gpahal/bge-m3-onnx-int8', local_dir='/app/model', local_dir_use_symlinks=False); \
+    snapshot_download(repo_id='BAAI/bge-m3', local_dir='/app/tokenizer', local_dir_use_symlinks=False, ignore_patterns=['*.safetensors', '*.bin'])"
 
-# Copy entire project
-COPY . ${LAMBDA_TASK_ROOT}/
+# Copy application code
+COPY . .
 
-# Set working directory
-WORKDIR ${LAMBDA_TASK_ROOT}
+# Pre-create .haystack directory in /tmp to avoid runtime errors
+RUN mkdir -p /tmp/.haystack
 
-# Set Lambda handler
-CMD ["app.lambda_handler"]
+# Run FastHTML app normally (Lambda Web Adapter handles the Lambda integration)
+CMD ["python", "-m", "src.retrieval.app"]

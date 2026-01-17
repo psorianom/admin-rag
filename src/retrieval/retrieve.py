@@ -34,8 +34,12 @@ def get_embedder():
     if _embedder is None:
         print("Loading BGE-M3 ONNX int8 quantized model (first load only)...")
         _embedder = {
-            "model": ORTModelForCustomTasks.from_pretrained("gpahal/bge-m3-onnx-int8"),
-            "tokenizer": AutoTokenizer.from_pretrained("BAAI/bge-m3")
+            # Load model and tokenizer from the local paths defined in the Dockerfile
+            # This avoids any network calls or caching issues in the Lambda environment.
+            "model": ORTModelForCustomTasks.from_pretrained(
+                "/app/model", file_name="model_quantized.onnx"
+            ),
+            "tokenizer": AutoTokenizer.from_pretrained("/app/tokenizer"),
         }
     return _embedder
 

@@ -1256,7 +1256,188 @@ UI shows answer with green confidence badge + Sources 1 & 2 highlighted with blu
 4. Citation tracking (sources highlighted)
 5. Confidence scoring (visual confidence badges)
 
-**Ready for Phase 6**: Quality evaluation and user feedback
+**Ready for Phase 6**: AWS Lambda deployment
+
+## Phase 6: AWS Lambda Deployment (In Progress)
+
+### Overview
+Deploying the complete RAG system to AWS Lambda with FastHTML UI, using Lambda Web Adapter for seamless integration.
+
+### 6.1 Initial Terraform Infrastructure ✅
+
+**Files created:**
+- `terraform/provider.tf` - AWS provider configuration (eu-west-3)
+- `terraform/variables.tf` - Lambda settings (3GB RAM, 30s timeout)
+- `terraform/iam.tf` - IAM roles and permissions
+- `terraform/lambda.tf` - Lambda function + ECR repository
+- `terraform/api_gateway.tf` - HTTP endpoint
+- `terraform/outputs.tf` - Display deployment URLs
+- `terraform/README.md` - 8-step deployment guide
+
+**Infrastructure provisioned:**
+- Lambda function: `admin-rag-retrieval` (3GB RAM - account limit)
+- ECR repository: `908027388369.dkr.ecr.eu-west-3.amazonaws.com/admin-rag-retrieval`
+- API Gateway endpoint: `https://rs3vbew2bh.execute-api.eu-west-3.amazonaws.com/prod`
+
+### 6.2 Docker Image Evolution (Multiple Iterations)
+
+**Approach 1: Manual Lambda Handler**
+- Created `handler.py` wrapper for Lambda
+- Issue: `Runtime.InvalidEntrypoint` - Lambda couldn't find handler
+- Problem: Complex path resolution in Lambda environment
+
+**Approach 2: Lambda Base Image with manylinux wheels**
+- Switched to `public.ecr.aws/lambda/python:3.11`
+- Tried `--platform manylinux2014_x86_64 --only-binary=:all:` for numpy
+- Issue: `apsw==3.51.2.0` has no pre-compiled wheels, requires compilation
+- Problem: Amazon Linux 2 has GCC 7.3.1, NumPy 2.x requires GCC >= 9.3
+
+**Approach 3: Multi-stage Build**
+- Stage 1: Build on Debian (modern GCC)
+- Stage 2: Copy to Lambda runtime
+- Works but adds complexity
+
+**Approach 4: AWS Lambda Web Adapter** ✅
+- Discovered official AWS example: FastHTML on Lambda
+- Uses `public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1`
+- Regular Python image + Lambda Web Adapter extension
+- No manual Lambda handler needed - FastHTML runs normally
+- Simpler: Just `CMD ["python", "-m", "src.retrieval.app"]`
+
+### 6.3 Current Dockerfile (Lambda Web Adapter)
+
+```dockerfile
+FROM public.ecr.aws/docker/library/python:3.11-slim-bullseye
+
+# Install Lambda Web Adapter as extension
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+
+# Lambda has read-only filesystem except /tmp
+ENV HOME=/tmp
+ENV HAYSTACK_TELEMETRY_ENABLED=False
+
+# Install build tools (for apsw and other C extensions)
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install PyTorch CPU + dependencies via Poetry
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir poetry poetry-plugin-export
+
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry export --only lambda --without-hashes -o requirements.txt && \
+    grep -v "nvidia-" requirements.txt | grep -v "^torch==" > requirements-cpu.txt && \
+    pip install --no-cache-dir -r requirements-cpu.txt && \
+    rm -rf requirements.txt requirements-cpu.txt
+
+# Pre-download ONNX BGE-M3 model
+RUN python -c "from optimum.onnxruntime import ORTModelForCustomTasks; from transformers import AutoTokenizer; ORTModelForCustomTasks.from_pretrained('gpahal/bge-m3-onnx-int8'); AutoTokenizer.from_pretrained('BAAI/bge-m3')"
+
+COPY . .
+
+# Pre-create .haystack directory in /tmp
+RUN mkdir -p /tmp/.haystack
+
+CMD ["python", "-m", "src.retrieval.app"]
+```
+
+### 6.4 Deployment Issues & Fixes
+
+**Issue 1: Invalid Entrypoint**
+- Error: `Runtime.InvalidEntrypoint` - couldn't find `app.lambda_handler`
+- Root cause: Using standard Python image without Lambda runtime
+- Fix: Switched to Lambda Web Adapter approach
+
+**Issue 2: NumPy GCC Version Mismatch**
+- Error: NumPy 2.x requires GCC >= 9.3, Amazon Linux 2 has GCC 7.3.1
+- Attempted: manylinux wheels with `--platform` and `--only-binary`
+- Problem: `apsw` (FastHTML dependency) has no pre-compiled wheels
+- Fix: Use regular Debian image (modern GCC) + Lambda Web Adapter
+
+**Issue 3: Haystack Telemetry Filesystem Error** (Current)
+- Error: `OSError: [Errno 30] Read-only file system: '/home/sbx_user1051'`
+- Root cause: Haystack tries to write telemetry config to home directory
+- Lambda filesystem is read-only except `/tmp`
+- Fixes applied:
+  - `ENV HOME=/tmp` - redirect home to writable directory
+  - `ENV HAYSTACK_TELEMETRY_ENABLED=False` - disable telemetry
+  - `RUN mkdir -p /tmp/.haystack` - pre-create directory
+- Status: Awaiting rebuild and deployment test
+
+### 6.5 Makefile Deployment Targets ✅
+
+Added to Makefile:
+```makefile
+docker-build:   Build Docker image with ECR tag
+docker-push:    Authenticate and push to ECR
+deploy:         Full workflow (build → push → terraform apply)
+```
+
+**Usage:**
+```bash
+make deploy
+```
+
+### 6.6 Key Learnings
+
+**Docker for Lambda:**
+- AWS Lambda Web Adapter simplifies web framework deployment
+- No need for custom Lambda handlers with Mangum
+- Regular Python image works with adapter extension
+- Debian base image better than Amazon Linux 2 for modern dependencies
+
+**Filesystem constraints:**
+- Lambda has read-only filesystem except `/tmp`
+- Set `HOME=/tmp` for packages that write config files
+- Pre-create directories in Dockerfile to avoid runtime errors
+
+**Dependency challenges:**
+- FastHTML → fastlite → apsw (C extension without manylinux wheels)
+- Solution: Use Debian base with proper build tools
+- Avoid Amazon Linux 2 for packages requiring modern GCC
+
+**Cost efficiency:**
+- Test locally FIRST before pushing to AWS
+- Each deployment iteration costs time and usage
+- `docker run` locally can catch most issues
+
+### Current Status
+
+**Working:**
+- ✅ Terraform infrastructure provisioned
+- ✅ ECR repository created
+- ✅ Docker image builds successfully
+- ✅ Lambda Web Adapter integrated
+- ✅ Qdrant Cloud fully populated (25,798 vectors)
+
+**Pending:**
+- ⏳ Haystack telemetry filesystem fix (rebuild in progress)
+- ⏳ Final deployment test
+- ⏳ End-to-end Lambda API verification
+
+**Next Steps:**
+1. Rebuild Docker image with filesystem fixes
+2. Push to ECR
+3. Wait for Lambda to pull new image
+4. Test API endpoint
+5. Verify FastHTML UI loads
+6. Test search functionality end-to-end
+
+### Files Changed
+- `Dockerfile` - Multiple iterations, now using Lambda Web Adapter
+- `Makefile` - Added docker-build, docker-push, deploy targets
+- `terraform/*.tf` - Complete infrastructure as code
+- `handler.py` - Created then deleted (not needed with adapter)
+
+## Phase 6 Status: In Progress
+
+**Deployment blocked by Haystack telemetry filesystem error - fix applied, awaiting verification**
+
+---
+
+**Ready for Phase 7**: Quality evaluation and user feedback (after deployment complete)
 
 ## Next Steps
 
@@ -1272,3 +1453,49 @@ UI shows answer with green confidence badge + Sources 1 & 2 highlighted with blu
 - Source comparison (Code du travail vs convention)
 - Chat history for multi-turn Q&A
 - User rating/feedback system
+
+### 6.7 Deployment Troubleshooting & Final Architecture ✅
+
+Deploying the application to AWS Lambda revealed several challenges related to HTTP routing and the Lambda runtime environment. This section documents the issues, the solutions, and the final working architecture.
+
+#### Issue 1: API Gateway Stage Routing (404 Not Found)
+
+- **Symptom**: Initial requests to the public API Gateway URL succeeded for the root path (`/`) but failed with a `404 Not Found` for any other path (e.g., `/search`). Logs confirmed that requests were arriving at the Lambda with a `/prod` prefix (e.g., `GET /prod/search`), which the application's router did not recognize.
+
+- **Architectural Context (`Mangum` vs. `aws-lambda-web-adapter`)**: A key point of clarification was the application's architecture. While `src/retrieval/app.py` contained a `lambda_handler` using the `Mangum` library, the `Dockerfile`'s `CMD` starts a `uvicorn` web server directly. This means the application uses the **AWS Lambda Web Adapter pattern**, where the adapter runs as a sidecar process, converting Lambda events into HTTP requests for the running `uvicorn` server. The `Mangum`-based `lambda_handler` is therefore inactive in the deployed environment.
+
+- **Solution Iteration**:
+    1. **Attempt 1 (`AWS_LWA_REMOVE_BASE_PATH`)**: Setting the `AWS_LWA_REMOVE_BASE_PATH=/prod` environment variable in Terraform. This correctly stripped the prefix on the server-side, but did not solve the client-side issue where the browser, making requests from `.../prod/`, would request incorrect absolute paths (e.g., `.../search` instead of `.../prod/search`).
+    2. **Attempt 2 (Relative Paths)**: Changing the form's post URL from `hx_post="/search"` to `hx_post="search"`. This was also unreliable, as browser behavior for relative paths differs based on the presence of a trailing slash in the URL (`/prod` vs `/prod/`).
+    3. **Final Solution (Stage-Aware Application)**: The most robust solution was to make the application itself aware of the stage it's running in.
+        - **Terraform**: An `API_STAGE` environment variable was passed to the Lambda function.
+        - **Python**: The application reads `API_STAGE` from `src/config/constants.py` and dynamically prepends it to all routes and generated URLs. This ensures the application always generates correct, absolute paths (e.g., `/prod/search`) that work reliably.
+
+#### Issue 2: Lambda Ephemeral Storage (No Space Left on Device)
+
+- **Symptom**: After fixing the routing, logs showed `IO Error: No space left on device`. The application was trying to download the 570MB embedding model into the Lambda's temporary `/tmp` directory, which is limited to 512MB by default.
+
+- **Root Cause**: The Hugging Face library was not using the model pre-downloaded during the Docker build. Instead, it was attempting to create a new cache at runtime in `/tmp`, its default cache location in this environment.
+
+- **Solution**: Rather than simply increasing the storage (the "easy fix"), the root cause was addressed by creating a consistent cache path.
+    - **Dockerfile**: The `ENV HF_HOME /app/cache` instruction was added.
+    - **Mechanism**: This forces the Hugging Face library to use `/app/cache` as its cache location during both the `docker build` (when the model is downloaded) and at runtime. The library now finds the model in the expected location and does not attempt to re-download it.
+
+This approach resolved the storage issue without requiring changes to the Lambda resource limits, resulting in a more elegant and efficient solution.
+
+The final deployed architecture is now robust, stage-aware, and correctly configured to handle its dependencies within the Lambda runtime constraints.
+
+#### Issue 3: Lambda Timeout on First Request
+
+- **Symptom**: After fixing the routing and caching issues, the application began to fail with a `Task timed out after 30.66 seconds` error on the first request.
+- **Analysis**: A 28-second gap was identified in the logs between the attempt to load the embedding model and the final timeout. This indicated that the model loading process itself was taking too long, blocking the main thread and causing the web server to become unresponsive to the Lambda Web Adapter.
+- **Initial Diagnosis Flaw**: The first proposed solution was to move the slow operation into the Lambda `Init` phase. However, this was correctly identified as flawed because the `Init` phase has its own stricter timeout of 10 seconds, which a 28-second process would also fail.
+- **New Hypothesis**: The extreme slowness is likely caused by the `from_pretrained` function entering a slow "discovery" mode because it's not being given the explicit filename of the model (`model_quantized.onnx`) and has to scan for it. Fixing the `Could not find any ONNX files with standard file name model.onnx` warning, even though it's logged as a warning, may unlock a "fast path" for loading and drastically reduce the time.
+- **Verification Step**: To test this hypothesis without another lengthy deployment cycle, a local test script was created: `scripts/test_model_load_time.py`. This script's purpose is to isolate the model loading function and measure the time difference between calling it with and without the explicit `file_name` parameter. This provides a data-driven way to confirm the cause of the slowness before applying a fix to the main application.
+
+#### Final Resolution: The API Gateway Timeout
+
+- **Symptom**: After deploying a version with a 120-second Lambda timeout, the application logs in CloudWatch showed a successful ~90-second execution. However, the web UI did not update with the results.
+- **Root Cause**: This discrepancy revealed the true bottleneck: the **AWS API Gateway** has a hard, non-configurable integration timeout of **29 seconds**. While the Lambda function was correctly running to completion in the background, API Gateway was terminating the client connection after 29 seconds and sending an error response to the browser.
+- **The Architectural Wall**: This 29-second limit is a hard wall for the current architecture. A synchronous process that takes ~90 seconds cannot be served through a standard API Gateway integration.
+- **Next Steps**: The final task is to re-architect the AWS infrastructure to remove the API Gateway bottleneck. The proposed solution is to switch from API Gateway to a **Lambda Function URL**, which allows the timeout to be coupled directly to the Lambda function's own timeout (up to 15 minutes).

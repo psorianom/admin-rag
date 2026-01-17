@@ -72,3 +72,10 @@ terraform/terraform.tfvars
 # FLOW.md and TODO.md are tracked in git
 # CLAUDE.md is for local use only
 CLAUDE.md
+*.tfvars
+
+# SAM / Local testing
+.aws-sam/
+.env.json
+model/
+/sam-installation/

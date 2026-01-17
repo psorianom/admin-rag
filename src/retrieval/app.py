@@ -3,11 +3,13 @@ FastHTML web UI for testing retrieval pipeline with answer generation.
 """
 
 import logging
+import os
 from fasthtml.common import *
 from src.retrieval.retrieve import retrieve
 from src.agents.routing_agent import get_routing_agent
 from src.agents.multi_retriever import retrieve_with_routing
 from src.agents.answer_generator import get_answer_generator
+from src.config.constants import API_STAGE
 
 # Configure logging
 logging.basicConfig(
@@ -15,6 +17,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Make routes stage-aware (e.g., handle /prod prefix)
+root_path = f"/{API_STAGE}" if API_STAGE else ""
+print(f"INFO: Application starting with root_path: '{root_path}'")
 
 app, rt = fast_app()
 
@@ -105,7 +111,7 @@ def confidence_badge(confidence):
     )
 
 
-@rt("/")
+@rt(f"{root_path}/")
 def get():
     """Main page."""
     return Titled(
@@ -157,7 +163,7 @@ def get():
                     """
                 ),
 
-                hx_post="/search",
+                hx_post=f"{root_path}/search",
                 hx_target="#results",
                 hx_swap="innerHTML",
                 hx_indicator="#spinner"
@@ -179,7 +185,7 @@ def get():
     )
 
 
-@rt("/search")
+@rt(f"{root_path}/search")
 def post(query: str, top_k: int = 10):
     """Handle search request with intelligent routing."""
     logger.info(f"\n{'='*80}\nWEB UI /search REQUEST\n{'='*80}")
@@ -251,19 +257,15 @@ def post(query: str, top_k: int = 10):
         )
 
 
-# Lambda handler for AWS Lambda deployment
-async def lambda_handler(event, context):
-    """AWS Lambda handler for FastHTML app."""
-    from mangum import Mangum
-    return Mangum(app)(event, context)
-
-
 if __name__ == "__main__":
     import uvicorn
+    # Get port from environment variable or default to 8080
+    port = int(os.environ.get("PORT", 8080))
+    
     print("="*80)
     print("Starting Admin-RAG Web UI")
     print("="*80)
-    print("\nOpen your browser to: http://localhost:5001")
+    print(f"\nOpen your browser to: http://localhost:{port}{root_path}/")
     print("\nPress Ctrl+C to stop")
     print("="*80)
-    uvicorn.run(app, host='0.0.0.0', port=5001)
+    uvicorn.run(app, host='0.0.0.0', port=port)

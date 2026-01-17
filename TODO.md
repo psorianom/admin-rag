@@ -226,107 +226,157 @@ Deploy production-ready system on AWS serverless stack (€0/month).
   - Removed CLAUDE.md from repo (kept local only)
   - Added .env setup instructions to README
 
-### Next Tasks (In Order)
-- [ ] **Build Docker image locally**
-  ```bash
-  docker build -t admin-rag-retrieval .
-  ```
-  - Verify CPU-only PyTorch installation works
-  - Check image size (should be <2GB for Lambda)
+### Deployment Status (Complete) ✅
+- [x] **Terraform infrastructure created**
+  - Lambda function provisioned (3GB RAM)
+  - ECR repository created
+  - API Gateway endpoint: https://rs3vbew2bh.execute-api.eu-west-3.amazonaws.com/prod
 
-- [ ] **Deploy to AWS Lambda**
-  - Run Terraform: `cd terraform && terraform init && terraform plan && terraform apply`
-  - Authenticates Docker to ECR
-  - Pushes image to ECR
-  - Lambda pulls and starts serving
+- [x] **Docker image approach evolved**
+  - Switched to AWS Lambda Web Adapter (simpler than manual Lambda handlers)
+  - Uses regular Python image + Lambda Web Adapter extension
+  - FastHTML runs normally, adapter handles Lambda integration
 
-- [ ] **Test and verify**
-  - Web UI accessible via API Gateway URL (from Terraform output)
-  - Vector search works with cloud Qdrant
-  - Latency acceptable (60ms warm queries)
-  - Monitor AWS costs (should be €0)
+- [x] **Qdrant Cloud setup complete**
+  - 25,798 vectors uploaded (523MB/1GB used)
+  - Both collections (code_travail, kali) live and queryable
 
-### Deliverable ✅
-Production serverless system on AWS Lambda + Qdrant Cloud, ready for ingestion and deployment.
+- [x] **Deployment issues resolved**
+  - Fixed API Gateway stage routing by making the application stage-aware.
+  - Solved model re-downloading and disk space errors by setting a consistent `HF_HOME` cache path in the `Dockerfile`.
+
+### Deliverable (Blocked) ⚠️
+Production deployment is blocked. While the Lambda function executes successfully, the API Gateway's 29-second timeout prevents the UI from receiving the result on cold starts.
 
 ---
 
-## Phase 4: Agentic Layer (Pending)
+## Phase 8: Final Architecture - Lambda Function URL (Pending)
+
+### Goal
+Replace the API Gateway trigger with a Lambda Function URL to solve the hard 29-second timeout limit.
+
+### Tasks
+- [ ] **Update Terraform Configuration**
+  - Remove all `aws_apigatewayv2_*` resources from `terraform/api_gateway.tf`.
+  - Remove the `aws_lambda_permission` resource for API Gateway.
+  - Add a new `aws_lambda_function_url` resource in `terraform/lambda.tf`.
+  - Configure the URL with `authorization_type = "NONE"`.
+- [ ] **Update Documentation**
+  - Update `README.md` and `FLOW.md` with the new, simpler architecture diagram and deployment instructions.
+  - Add a new `outputs.tf` to output the new function URL.
+- [ ] **Deploy and Verify**
+  - Run `make deploy` to apply the infrastructure changes.
+  - Verify that a cold start of ~90 seconds now successfully returns a result to the UI.
+
+---
+
+## Phase 4: Agentic Layer ✅
 
 ### Goal
 Multi-step reasoning system that orchestrates retrieval and combines rules.
 
-### Tasks
-- [ ] **Design agent workflow**
-  - Query analysis → entity extraction
-  - Convention identification
-  - Multi-source retrieval
-  - Rule comparison and synthesis
-- [ ] **Implement agent tools**
-  - Convention identifier tool (extract job role, industry)
-  - Code du travail retriever tool
-  - KALI retriever tool (convention-specific)
-  - Rule comparison logic (hierarchy, favor rules)
-- [ ] **Setup Haystack agent**
-  - Configure agent orchestration
-  - Tool registration and routing
-  - Multi-step reasoning flow
-- [ ] **Choose & integrate LLM(s)**
-  - Test Claude API (better reasoning, €10-15/month)
-  - Test Mistral Large (cheaper, French-native, ~€3/month)
-  - Evaluate tradeoffs
-- [ ] **Prompt engineering**
-  - System prompts for legal reasoning
-  - Few-shot examples for French labor law
-  - Citation formatting instructions
+### Completed Tasks
+- [x] **Design agent workflow**
+  - Query analysis with GPT-4o-mini
+  - Convention identification from job roles/industries
+  - Multi-collection retrieval (code_travail + KALI)
+  - Four routing strategies: code_only, kali_only, both_code_first, both_kali_first
 
-### Budget allocation:
+- [x] **Implement agent tools**
+  - `routing_agent.py`: GPT-4o-mini powered routing with Pydantic validation
+  - `multi_retriever.py`: Multi-collection retrieval with IDCC metadata filtering
+  - Convention mapping for 7 major sectors (Syntec, Métallurgie, HCR, etc.)
+  - Nested field indexes in Qdrant for efficient filtering
+
+- [x] **LLM integration**
+  - OpenAI GPT-4o-mini for routing decisions
+  - Structured outputs with Pydantic models
+  - Temperature=0 for deterministic routing
+  - Cost: ~€0.000023 per query
+
+- [x] **Test coverage**
+  - 18 passing tests (8 routing + 10 retrieval)
+  - End-to-end testing with French labor law queries
+  - Convention auto-detection verified
+
+### Budget:
 - Infrastructure: €0/month (Lambda + Qdrant Cloud free tier)
-- LLM API: €20-25/month (full budget available)
+- LLM API: ~€0.70/month (1000 queries/day)
 
-### Deliverable
-Agent that can answer complex questions requiring multi-step reasoning across sources.
+### Deliverable ✅
+Agent that intelligently routes queries to appropriate collections with automatic convention detection.
 
 ---
 
-## Phase 5: Iteration & Quality (Pending)
+## Phase 5: Answer Generation & Citations ✅
 
 ### Goal
-Production-ready system with validated answer quality.
+Natural language answer generation with citation tracking and confidence scoring.
+
+### Completed Tasks
+- [x] **Answer generation**
+  - `answer_generator.py`: GPT-4o-mini synthesizes answers from top 3 results
+  - Pydantic `AnswerWithCitations` model for structured outputs
+  - Temperature=0.7 for natural yet consistent responses
+  - Automatic citation index tracking
+
+- [x] **Citation system**
+  - `citation_formatter.py`: Formats citations for Code du travail and KALI
+  - Blue left border highlighting for cited sources in UI
+  - Article references with IDCC numbers for conventions
+
+- [x] **Confidence scoring**
+  - 0-1 confidence score for each answer
+  - Color-coded badges (green/yellow/red) in UI
+  - Based on result quality and coverage
+
+- [x] **Web UI integration**
+  - Answer section with reasoning display
+  - Confidence badges with visual indicators
+  - Cited sources highlighted with blue borders
+  - Works locally and ready for Lambda
+
+- [x] **Test coverage**
+  - 15 comprehensive tests for answer generation
+  - Total: 33 passing tests (15 answer + 10 retriever + 8 routing)
+  - All 4 example queries tested end-to-end
+
+### Cost:
+- Per query: ~€0.000123 (routing + answer generation)
+- Monthly estimate: ~€0.37/month (1000 queries/day)
+
+### Deliverable ✅
+Complete RAG system with intelligent routing, answer generation, and citation tracking.
+
+---
+
+## Phase 6: Evaluation & Quality (Pending)
+
+### Goal
+Validate answer quality and tune for production use.
 
 ### Tasks
 - [ ] **Build evaluation dataset**
   - Collect 20-30 representative questions
   - Create ground truth answers
-  - Cover different question types:
-    - Simple lookups
-    - Convention-specific queries
-    - Multi-source reasoning
-    - Temporal/seniority-based rules
+  - Cover different question types
+
 - [ ] **Tune retrieval parameters**
   - Optimize top-k for each source
   - Test reranking strategies
   - Refine metadata filters
+
 - [ ] **Improve prompts**
   - Iterate based on wrong/incomplete answers
   - Add legal reasoning guidance
-  - Handle edge cases (conflicting rules, gaps)
-- [ ] **Add citation system**
-  - Return article references
-  - Include article numbers and sources
-  - Link to original legal text
-- [ ] **Handle edge cases**
-  - Missing conventions
-  - Conflicting rules between sources
-  - Temporal validity issues
-  - Out-of-scope questions
+  - Handle edge cases
 
 ### Deliverable
-Reliable system with good answer quality and proper citations.
+Validated system with benchmarked answer quality.
 
 ---
 
-## Phase 6: Polish & Extensions (Optional)
+## Phase 7: Polish & Extensions (Optional)
 
 **Time**: Open-ended, depends on requirements
 
