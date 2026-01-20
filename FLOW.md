@@ -1499,3 +1499,7 @@ The final deployed architecture is now robust, stage-aware, and correctly config
 - **Root Cause**: This discrepancy revealed the true bottleneck: the **AWS API Gateway** has a hard, non-configurable integration timeout of **29 seconds**. While the Lambda function was correctly running to completion in the background, API Gateway was terminating the client connection after 29 seconds and sending an error response to the browser.
 - **The Architectural Wall**: This 29-second limit is a hard wall for the current architecture. A synchronous process that takes ~90 seconds cannot be served through a standard API Gateway integration.
 - **Next Steps**: The final task is to re-architect the AWS infrastructure to remove the API Gateway bottleneck. The proposed solution is to switch from API Gateway to a **Lambda Function URL**, which allows the timeout to be coupled directly to the Lambda function's own timeout (up to 15 minutes).
+
+##### Throttling and Cost Control
+
+A `reserved_concurrent_executions` limit of 5 was added to the Lambda function's configuration. This acts as a crucial safety throttle, ensuring the function cannot scale uncontrollably and protecting against runaway costs. It guarantees that a maximum of 5 instances can run simultaneously.

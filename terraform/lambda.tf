@@ -17,7 +17,7 @@ resource "aws_lambda_function" "main" {
   role          = aws_iam_role.lambda_role.arn  # Use the IAM role from iam.tf
   memory_size   = var.lambda_memory             # 10GB for ONNX model
   timeout       = var.lambda_timeout            # 30 seconds timeout
-
+  reserved_concurrent_executions =5
   package_type = "Image"  # Use Docker image instead of zip
   image_uri    = "${aws_ecr_repository.lambda_repo.repository_url}@${data.aws_ecr_image.lambda_image.image_digest}"  # Pull image from ECR using digest
 
