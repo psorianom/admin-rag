@@ -1497,8 +1497,36 @@ The final deployed architecture is now robust, stage-aware, and correctly config
 
 - **Symptom**: After deploying a version with a 120-second Lambda timeout, the application logs in CloudWatch showed a successful ~90-second execution. However, the web UI did not update with the results.
 - **Root Cause**: This discrepancy revealed the true bottleneck: the **AWS API Gateway** has a hard, non-configurable integration timeout of **29 seconds**. While the Lambda function was correctly running to completion in the background, API Gateway was terminating the client connection after 29 seconds and sending an error response to the browser.
+
+**Understanding the Two Timeouts:**
+
+1. **Lambda Timeout (120 seconds)** - Configurable in `variables.tf`
+   - Controls how long Lambda will execute before being killed
+   - Set to 120s to accommodate ~90s model loading on cold start
+   - This timeout was sufficient - Lambda always completed successfully
+
+2. **API Gateway Timeout (29 seconds)** - AWS hard limit, cannot be changed
+   - Controls how long API Gateway waits for Lambda response before dropping connection
+   - Hardcoded AWS limitation for both HTTP API and REST API Gateway
+   - This was the bottleneck - too short for cold start
+
+**The Problem Flow:**
+```
+User → API Gateway → Lambda
+        │             └─> [Loading model... 10s... 20s... 29s... 90s... SUCCESS ✅]
+        └─> [29s TIMEOUT! Closes connection, returns 504 to user ❌]
+
+Result: CloudWatch logs show "200 OK" but browser shows timeout error
+```
+
+**Why "sometimes it worked":**
+- **Worked**: Lambda was warm (previous request < 15min ago), responds in 1-2s < 29s limit
+- **Failed**: Lambda cold start (no requests for 15min), takes 90s > 29s limit, connection dropped
+
+Lambda always completed and generated correct answers (visible in logs), but API Gateway already told the browser "give up" before Lambda could send the response back.
+
 - **The Architectural Wall**: This 29-second limit is a hard wall for the current architecture. A synchronous process that takes ~90 seconds cannot be served through a standard API Gateway integration.
-- **Next Steps**: The final task is to re-architect the AWS infrastructure to remove the API Gateway bottleneck. The proposed solution is to switch from API Gateway to a **Lambda Function URL**, which allows the timeout to be coupled directly to the Lambda function's own timeout (up to 15 minutes).
+- **Solution**: Switch from API Gateway to **Lambda Function URL**, which respects the Lambda function's timeout (up to 15 minutes), allowing the full 120s for cold starts.
 
 ##### Throttling and Cost Control
 
