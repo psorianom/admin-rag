@@ -725,18 +725,7 @@ graph TD
     Lambda_File -->|Function name to| Outputs
 ```
 
-**Monthly cost breakdown:**
-- Lambda: €0 (free tier, bursty traffic)
-- Qdrant Cloud: €0 (free tier, 523MB < 1GB limit)
-- API Gateway: €0 (free tier, <1M requests/month)
-- **Total: €0/month** (leaves full budget for agentic layer)
-
-**Trade-offs:**
-- Cold starts: First query takes 5s (acceptable, just warm up before demo)
-- Vendor lock-in: Tied to AWS Lambda + Qdrant Cloud
-- Benefits: €0 cost, fast queries, auto-scaling, production-ready latency
-
-**Next phase:** Agentic layer with Claude/Mistral API (€25/month budget available)
+**Note**: This cost breakdown was superseded. See the complete "Cost Analysis: Production Infrastructure" section after Phase 5 for current pricing with Lambda Function URL architecture.
 
 ## Phase 3b: Infrastructure & Deployment ✅
 
@@ -1078,8 +1067,8 @@ Implemented intelligent query routing agent that:
 - Result: HCR convention + general dismissal law
 
 ### Costs
-- **OpenAI GPT-4o-mini**: ~€0.000023 per query
-- **Monthly estimate** (1000 queries/day): ~€0.70
+- **OpenAI GPT-4o-mini (routing only)**: ~€0.000023 per query
+- See "Cost Analysis: Production Infrastructure" section after Phase 5 for complete breakdown
 
 ### Files Changed
 - `src/agents/routing_agent.py` - Core routing logic (170 lines)
@@ -1101,7 +1090,7 @@ Implemented intelligent query routing agent that:
 - ✅ Multi-collection retrieval with metadata filtering
 - ✅ 18 passing tests (routing + retrieval)
 - ✅ Fixed Qdrant nested field indexing
-- ✅ Production-ready cost (~€0.70/month for 1000 queries/day)
+- ✅ Production-ready cost (see centralized cost table after Phase 5)
 - ✅ Full end-to-end testing verified
 
 **Ready for Phase 5**: Answer generation and citations
@@ -1207,9 +1196,7 @@ UI shows answer with green confidence badge + Sources 1 & 2 highlighted with blu
 - Answer generation (GPT-4o-mini, ~150 tokens): €0.000100
 - **Total**: €0.000123 per query
 
-**Monthly estimate** (1000 queries/day):
-- ~€0.37/month (realistic usage)
-- Negligible cost added to existing routing €0.70/month
+See "Cost Analysis: Production Infrastructure" section below for complete breakdown including AWS and Qdrant costs.
 
 ### Files Changed
 
@@ -1247,7 +1234,7 @@ UI shows answer with green confidence badge + Sources 1 & 2 highlighted with blu
 - ✅ Blue border highlighting for cited sources
 - ✅ Comprehensive test coverage
 - ✅ Production-ready answer generation layer
-- ✅ Minimal cost increase (~€0.12 per query)
+- ✅ Minimal cost increase (€0.000123 per query, see cost table below)
 
 **Total system capability**:
 1. Intelligent routing (detects conventions)
@@ -1257,6 +1244,64 @@ UI shows answer with green confidence badge + Sources 1 & 2 highlighted with blu
 5. Confidence scoring (visual confidence badges)
 
 **Ready for Phase 6**: AWS Lambda deployment
+
+---
+
+## Cost Analysis: Production Infrastructure
+
+### Complete Cost Breakdown
+
+| Service | Configuration | Free Tier | Current Usage | Monthly Cost | Notes |
+|---------|--------------|-----------|---------------|--------------|-------|
+| **AWS Lambda** | 3GB RAM, 120s timeout, 5 concurrent max | 1M requests/month<br/>400,000 GB-seconds/month | ~100-1000 requests/month<br/>~10-100 GB-seconds | **€0** | Within free tier for demo/testing. Cold start ~90s, warm ~1-2s |
+| **AWS ECR** | Docker image storage | 500MB/month (12 months for new accounts) | ~1GB image | **€0-0.10** | €0.10/GB/month after free tier |
+| **Lambda Function URL** | Public HTTPS endpoint | Included with Lambda | N/A | **€0** | No additional cost beyond Lambda invocations |
+| **CloudWatch Logs** | Application logging | 5GB ingestion, 5GB storage/month | ~100MB/month | **€0** | Within free tier for low traffic |
+| **Qdrant Cloud** | Vector database | 1GB storage, unlimited requests | 523MB (25,798 vectors) | **€0** | Free tier covers full dataset |
+| **OpenAI API** | GPT-4o-mini (routing + generation) | None | Variable by query volume | **€0.00012/query** | Routing: €0.000023<br/>Generation: €0.0001 |
+| **Vast.ai** | GPU embedding generation (one-time) | None | 25,798 chunks embedded | **€0.20** (paid) | One-time cost, already completed |
+
+### Monthly Cost Estimates by Usage
+
+| Usage Scenario | Queries/Month | Lambda | ECR | OpenAI | **Total/Month** |
+|----------------|---------------|--------|-----|--------|----------------|
+| **Demo/Testing** | 100 | €0 | €0 | €0.01 | **€0.01** |
+| **Light Production** | 1,000 | €0 | €0.10 | €0.12 | **€0.22** |
+| **Medium Production** | 10,000 | €0 | €0.10 | €1.23 | **€1.33** |
+| **Heavy Production** | 100,000 | €0* | €0.10 | €12.30 | **€12.40** |
+
+*Lambda remains free up to 1M requests/month. Heavy production would use ~10-100k GB-seconds, still within 400k free tier.
+
+### Cost Drivers
+
+**Current (Demo Phase)**: ~€0.01-0.22/month
+- Primary cost: OpenAI API (scales with query volume)
+- AWS services: Free tier covers all usage
+- Qdrant: Free tier sufficient
+
+**Future Optimizations** (if scaling):
+1. **Reduce OpenAI calls**: Cache routing decisions for common query patterns
+2. **Optimize Lambda**: Reduce cold starts with provisioned concurrency (~€13/month for 1 instance)
+3. **Self-host embeddings**: Replace OpenAI with local inference (increases Lambda costs, eliminates API costs)
+
+### One-Time Setup Costs
+
+| Item | Cost | Status |
+|------|------|--------|
+| Vast.ai GPU embedding generation | €0.20 | ✅ Paid |
+| **Total Setup** | **€0.20** | ✅ Complete |
+
+### Comparison: Alternative Architectures
+
+| Architecture | Monthly Cost | Pros | Cons |
+|--------------|--------------|------|------|
+| **Current: Lambda + Qdrant Cloud** | €0.22 | Serverless, auto-scaling, €0 infra | 90s cold starts |
+| EC2 t4g.small + Qdrant Cloud | €10-15 | No cold starts | Always-on cost, slow CPU inference |
+| EC2 g4dn.xlarge + self-hosted Qdrant | €250+ | Fast GPU inference | Very expensive, overkill for demo |
+
+**Decision**: Current architecture is optimal for demo and light production use.
+
+---
 
 ## Phase 6: AWS Lambda Deployment (In Progress)
 
