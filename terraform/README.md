@@ -1,230 +1,57 @@
-# Terraform Deployment Guide
+# Terraform Infrastructure
 
-This directory contains Terraform configuration for deploying Admin-RAG to AWS Lambda + API Gateway.
+This directory contains the Terraform configuration for deploying the Admin-RAG application on AWS.
 
-## Prerequisites
+## Architecture: Lambda Function URL
 
-- AWS account with credentials configured: `aws configure`
-- Terraform installed: `terraform --version`
-- Docker installed (for building Lambda image)
+The infrastructure is designed to be simple, robust, and cost-effective (serverless). It consists of the following main components:
 
-## Files Overview
+1.  **Amazon ECR (Elastic Container Registry)**:
+    *   A private Docker registry to store the application's container image.
+    *   Defined in `lambda.tf`.
 
-| File | Purpose | Dependencies |
-|------|---------|--------------|
-| `provider.tf` | AWS provider configuration (region: eu-west-3) | None (foundation) |
-| `variables.tf` | Lambda settings (memory: 10GB, timeout: 30s, name) | provider.tf |
-| `iam.tf` | IAM role and permissions for Lambda | variables.tf |
-| `lambda.tf` | Lambda function + ECR repository | iam.tf |
-| `api_gateway.tf` | Public HTTP endpoint for Lambda | lambda.tf |
-| `outputs.tf` | Display API URL, ECR URL, Lambda name | lambda.tf, api_gateway.tf |
+2.  **AWS Lambda Function**:
+    *   The core compute component that runs the application container.
+    *   It is configured with 3GB of memory and a **120-second timeout** to handle the long cold start caused by the initial model loading (~90 seconds).
+    *   Defined in `lambda.tf`.
 
-### Execution Order
+3.  **Lambda Function URL**:
+    *   This provides a dedicated, public HTTPS endpoint directly for the Lambda function.
+    *   This architecture was chosen specifically to bypass the **29-second timeout limit** of API Gateway, which was preventing the UI from receiving a response during a cold start.
+    *   The Function URL's timeout is linked to the Lambda function's timeout, solving the primary deployment issue.
+    *   Defined in `lambda.tf`.
 
-When writing Terraform files from scratch, build them in this order (each depends on the previous):
+4.  **IAM Role**:
+    *   An IAM role that grants the Lambda function the necessary permissions to run and write logs to CloudWatch.
+    *   Defined in `iam.tf`.
+
+### Deployment Flow
+
+The request flow is very direct:
 
 ```
-1. provider.tf          (AWS foundation)
-   ↓
-2. variables.tf         (Input configuration)
-   ↓
-3. iam.tf               (Lambda IAM role)
-   ↓
-4. lambda.tf            (Lambda + ECR)
-   ↓
-5. api_gateway.tf       (HTTP endpoint)
-   ↓
-6. outputs.tf           (Display results)
+User's Browser -> Lambda Function URL -> AWS Lambda -> Application Container
 ```
 
-Each file only references what was created in previous steps. This ensures no circular dependencies and clean infrastructure layering.
+### How to Deploy
 
-## Deployment Steps
+The `Makefile` in the root directory automates the entire deployment process.
 
-### Step 1: Initialize Terraform
+```bash
+# From the project root
+make deploy
+```
 
-Download AWS provider and set up working directory:
+This command will:
+1.  Build the Docker image.
+2.  Push the image to the ECR repository.
+3.  Run `terraform apply` to provision or update the AWS resources.
+
+### Outputs
+
+After deployment, the public URL of the application will be displayed as a Terraform output. You can also retrieve it at any time by running:
 
 ```bash
 cd terraform
-terraform init
+terraform output lambda_function_url
 ```
-
-**Output:** `Terraform has been successfully initialized!`
-
----
-
-### Step 2: Validate Configuration
-
-Check syntax of all `.tf` files:
-
-```bash
-terraform validate
-```
-
-**Output:** `Success! Configuration is valid.`
-
----
-
-### Step 3: Plan Deployment
-
-Preview what Terraform will create (DRY RUN):
-
-```bash
-terraform plan
-```
-
-**Output:** Shows all resources to be created:
-- ECR repository
-- Lambda function
-- IAM role
-- API Gateway
-- Permissions
-
-**Review this carefully before applying!**
-
----
-
-### Step 4: Apply Deployment
-
-Actually create the resources on AWS:
-
-```bash
-terraform apply
-```
-
-**Prompt:** `Do you want to perform these actions?` → Type `yes`
-
-**Wait:** Takes ~2-3 minutes
-
-**Output:** Shows:
-```
-Apply complete! Resources: 10 added, 0 changed, 0 destroyed.
-
-Outputs:
-api_endpoint = "https://abc123.execute-api.eu-west-3.amazonaws.com/prod"
-ecr_repository_url = "908027388369.dkr.ecr.eu-west-3.amazonaws.com/admin-rag-retrieval"
-lambda_function_name = "admin-rag-retrieval"
-```
-
-**Save these URLs!** You need the ECR URL for pushing Docker images.
-
----
-
-### Step 5: Build Docker Image
-
-Create Docker image locally:
-
-```bash
-cd ..  # Go back to project root
-docker build -t admin-rag-retrieval .
-```
-
----
-
-### Step 6: Authenticate Docker to ECR
-
-Get login credentials from AWS:
-
-```bash
-aws ecr get-login-password --region eu-west-3 | \
-  docker login --username AWS --password-stdin <ECR_REPOSITORY_URL>
-```
-
-Replace `<ECR_REPOSITORY_URL>` with the URL from Step 4 output (e.g., `908027388369.dkr.ecr.eu-west-3.amazonaws.com`)
-
----
-
-### Step 7: Push Docker Image to ECR
-
-Upload your image:
-
-```bash
-docker push <ECR_REPOSITORY_URL>/admin-rag-retrieval:latest
-```
-
-**Wait:** Takes ~1-2 minutes (uploading 1GB image)
-
----
-
-### Step 8: Test the API
-
-Your Lambda is now live! Test it:
-
-```bash
-curl https://abc123.execute-api.eu-west-3.amazonaws.com/prod
-```
-
-(Use the `api_endpoint` from Step 4)
-
----
-
-## Cleanup (Destroy Resources)
-
-To delete everything and stop paying:
-
-```bash
-cd terraform
-terraform destroy
-```
-
-**Prompt:** `Do you really want to destroy all resources?` → Type `yes`
-
-**Wait:** Takes ~2-3 minutes
-
-**Output:** `Destroy complete! Resources: 10 destroyed.`
-
----
-
-## Troubleshooting
-
-### Terraform init fails
-- Check AWS credentials: `aws sts get-caller-identity`
-- Check internet connection
-
-### Terraform apply fails with permission error
-- Check IAM user has permissions (Lambda, IAM, API Gateway, ECR, CloudWatch)
-
-### Docker push fails with auth error
-- Re-run ECR login: `aws ecr get-login-password ...`
-- Credentials expire after ~12 hours
-
-### Lambda shows "ResourceNotFoundException"
-- Wait 1-2 minutes, ECR might still be processing image
-- Check image was pushed: `aws ecr describe-images --repository-name admin-rag-retrieval`
-
----
-
-## View Deployed Resources
-
-List what was created:
-
-```bash
-terraform state list
-```
-
-Show details of a specific resource:
-
-```bash
-terraform state show aws_lambda_function.main
-```
-
-View all outputs again:
-
-```bash
-terraform output
-```
-
----
-
-## Quick Reference
-
-| Command | Purpose |
-|---------|---------|
-| `terraform init` | Initialize workspace |
-| `terraform validate` | Check syntax |
-| `terraform plan` | Preview changes |
-| `terraform apply` | Deploy to AWS |
-| `terraform destroy` | Delete all resources |
-| `terraform output` | Show outputs |
-| `terraform state list` | List resources |
