@@ -29,7 +29,21 @@ resource "aws_lambda_function" "main" {
       LLM_PROVIDER           = var.llm_provider
       OPENAI_API_KEY         = var.openai_api_key
       OPENAI_MODEL           = var.openai_model
-      API_STAGE              = "prod"  # Pass API Gateway stage to app
     }
+  }
+}
+
+# Create Lambda Function URL for public access
+# This replaces API Gateway and allows Lambda's full timeout (120s) to be used
+resource "aws_lambda_function_url" "main" {
+  function_name      = aws_lambda_function.main.function_name
+  authorization_type = "NONE"  # Public access without authentication
+
+  cors {
+    allow_origins     = ["*"]
+    allow_methods     = ["GET", "POST", "PUT", "DELETE"]
+    allow_headers     = ["*"]
+    expose_headers    = ["*"]
+    max_age           = 86400
   }
 }
