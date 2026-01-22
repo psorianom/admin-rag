@@ -1253,7 +1253,7 @@ See "Cost Analysis: Production Infrastructure" section below for complete breakd
 
 | Service | Configuration | Free Tier | Current Usage | Monthly Cost | Notes |
 |---------|--------------|-----------|---------------|--------------|-------|
-| **AWS Lambda** | 3GB RAM, 120s timeout, 5 concurrent max | 1M requests/month<br/>400,000 GB-seconds/month | ~100-1000 requests/month<br/>~10-100 GB-seconds | **€0** | Within free tier for demo/testing. Cold start ~90s, warm ~1-2s |
+| **AWS Lambda** | 3GB RAM, 120s timeout | 1M requests/month<br/>400,000 GB-seconds/month | ~100-1000 requests/month<br/>~10-100 GB-seconds | **€0** | Within free tier for demo/testing. Cold start ~90s, warm ~1-2s. Auto-scales within account limits |
 | **AWS ECR** | Docker image storage | 500MB/month (12 months for new accounts) | ~1GB image | **€0-0.10** | €0.10/GB/month after free tier |
 | **Lambda Function URL** | Public HTTPS endpoint | Included with Lambda | N/A | **€0** | No additional cost beyond Lambda invocations |
 | **CloudWatch Logs** | Application logging | 5GB ingestion, 5GB storage/month | ~100MB/month | **€0** | Within free tier for low traffic |
@@ -1597,4 +1597,6 @@ Lambda always completed and generated correct answers (visible in logs), but API
 
 ##### Throttling and Cost Control
 
-A `reserved_concurrent_executions` limit of 5 was added to the Lambda function's configuration. This acts as a crucial safety throttle, ensuring the function cannot scale uncontrollably and protecting against runaway costs. It guarantees that a maximum of 5 instances can run simultaneously.
+**Note**: Initially attempted to set `reserved_concurrent_executions = 5` as a cost control measure, but this failed due to AWS account limits (requires minimum 10 unreserved executions).
+
+**Decision**: Removed concurrency limit for demo/testing phase. Lambda will auto-scale within account's default limits (typically 1000 concurrent executions). For free tier usage with low traffic, this is acceptable. If costs become a concern in production, can add CloudWatch alarms or use AWS Budgets for cost monitoring instead.
