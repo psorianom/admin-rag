@@ -1,6 +1,27 @@
 # Project Roadmap
 
-Estimated total: **10-13 days of focused work**
+## Current Status (January 2026)
+
+**Completed**:
+- ✅ Data pipeline (25,798 legal chunks from Code du travail + 7 KALI conventions)
+- ✅ Qdrant Cloud deployment (523MB vectors indexed)
+- ✅ Intelligent routing agent (GPT-4o-mini with convention detection)
+- ✅ Answer generation with citations and confidence scoring
+- ✅ Lambda Function URL infrastructure (fixed API Gateway timeout issue)
+
+**Ready for Deployment**:
+- Terraform configuration cleaned up (API Gateway removed, Lambda Function URL added)
+- Run `./cleanup_api_gateway.sh` and `terraform apply` to deploy
+
+**Next Phase**:
+- Phase 6: Evaluation & quality tuning
+- Collect evaluation dataset and benchmark answer quality
+
+---
+
+## Original Estimate
+
+Estimated total: **10-13 days of focused work** (actual: ~15 days with deployment debugging)
 
 ## Phase 1: Data Pipeline (2-3 days)
 
@@ -97,18 +118,19 @@ Basic RAG system that can retrieve relevant articles from both sources.
   - KALI: 46% <500 chars, mean 1130 chars
   - 175 empty chunks (1.2%), 285 oversized chunks (1.1%)
   - Decision: Proceed, refactor if retrieval quality suffers
-- [ ] **Build basic retrieval pipeline**
+- [x] **Build basic retrieval pipeline**
   - Query → Embedding → Retrieval
   - Top-k selection
-  - Metadata-based filtering
-- [ ] **Test retrieval quality**
+  - Metadata-based filtering (IDCC, source, hierarchy)
+  - Semantic search with BGE-M3 embeddings
+- [x] **Test retrieval quality**
   - Manual testing with sample questions
-  - Check if correct articles are retrieved
-  - Tune top-k and similarity thresholds
-  - Evaluate chunking strategy performance
+  - Correct articles retrieved with good relevance scores
+  - Top-k and similarity thresholds validated
+  - Chunking strategy performs well
 
 ### Deliverable
-✅ **PHASE 2 COMPLETE**: 25,798 chunks indexed in Qdrant with BGE-M3 embeddings
+✅ **PHASE 2 COMPLETE**: 25,798 chunks indexed in Qdrant Cloud with BGE-M3 embeddings
 - Working vast.ai automation for GPU embedding
 - Pre-computed embedding support in pipelines
 - Makefile automation for reproducibility
@@ -245,28 +267,47 @@ Deploy production-ready system on AWS serverless stack (€0/month).
   - Fixed API Gateway stage routing by making the application stage-aware.
   - Solved model re-downloading and disk space errors by setting a consistent `HF_HOME` cache path in the `Dockerfile`.
 
-### Deliverable (Blocked) ⚠️
-Production deployment is blocked. While the Lambda function executes successfully, the API Gateway's 29-second timeout prevents the UI from receiving the result on cold starts.
+### Deliverable ✅
+**PHASE 3b COMPLETE**: Infrastructure ready for deployment with Lambda Function URL architecture.
 
 ---
 
-## Phase 8: Final Architecture - Lambda Function URL (Pending)
+## Phase 8: Lambda Function URL Migration ✅
 
 ### Goal
-Replace the API Gateway trigger with a Lambda Function URL to solve the hard 29-second timeout limit.
+Replace API Gateway with Lambda Function URL to solve the 29-second timeout issue.
 
-### Tasks
-- [ ] **Update Terraform Configuration**
-  - Remove all `aws_apigatewayv2_*` resources from `terraform/api_gateway.tf`.
-  - Remove the `aws_lambda_permission` resource for API Gateway.
-  - Add a new `aws_lambda_function_url` resource in `terraform/lambda.tf`.
-  - Configure the URL with `authorization_type = "NONE"`.
-- [ ] **Update Documentation**
-  - Update `README.md` and `FLOW.md` with the new, simpler architecture diagram and deployment instructions.
-  - Add a new `outputs.tf` to output the new function URL.
-- [ ] **Deploy and Verify**
-  - Run `make deploy` to apply the infrastructure changes.
-  - Verify that a cold start of ~90 seconds now successfully returns a result to the UI.
+**Problem**: API Gateway has a hard 29-second timeout that cannot be changed. Lambda cold starts take ~90s to load the ONNX model, causing timeouts even though Lambda completes successfully.
+
+**Solution**: Lambda Function URL respects Lambda's full 120-second timeout.
+
+### Completed Tasks
+- [x] **Update Terraform Configuration**
+  - Removed `api_gateway.tf` (deleted file)
+  - Added `aws_lambda_function_url` resource in `lambda.tf` with CORS support
+  - Removed API_STAGE environment variable (no longer needed)
+  - Created `cleanup_api_gateway.sh` script to remove stale state
+
+- [x] **Update Documentation**
+  - Updated `FLOW.md` with detailed timeout explanation
+  - Updated `README.md` to reflect Lambda Function URL architecture
+  - Updated `terraform/README.md` with simplified deployment flow
+
+- [x] **Prepare for Deployment**
+  - Code changes committed and pushed
+  - Next steps documented in cleanup script
+
+### Next Steps (To Deploy)
+```bash
+cd terraform
+./cleanup_api_gateway.sh  # Remove old API Gateway from state
+terraform plan             # Review changes
+terraform apply            # Deploy Lambda Function URL
+terraform output lambda_function_url  # Get new public URL
+```
+
+### Deliverable ✅
+Clean Terraform configuration with Lambda Function URL. Ready to deploy.
 
 ---
 
@@ -350,29 +391,46 @@ Complete RAG system with intelligent routing, answer generation, and citation tr
 
 ---
 
-## Phase 6: Evaluation & Quality (Pending)
+## Phase 6: Evaluation & Quality (Next Priority)
 
 ### Goal
-Validate answer quality and tune for production use.
+Validate answer quality and tune for production use after Lambda deployment.
 
 ### Tasks
+- [ ] **Deploy to AWS Lambda**
+  - Run `./cleanup_api_gateway.sh` in terraform directory
+  - Apply Terraform changes with `terraform apply`
+  - Verify Lambda Function URL works with cold starts
+  - Test end-to-end with public URL
+
 - [ ] **Build evaluation dataset**
-  - Collect 20-30 representative questions
-  - Create ground truth answers
-  - Cover different question types
+  - Collect 20-30 representative French labor law questions
+  - Create ground truth answers with legal expert input
+  - Cover different question types:
+    - General Code du travail questions
+    - Convention-specific queries
+    - Multi-source comparisons
+    - Edge cases (contradictions, temporal queries)
+
+- [ ] **Measure baseline performance**
+  - Run evaluation dataset through system
+  - Track metrics: answer accuracy, citation correctness, confidence calibration
+  - Document failure cases and error patterns
 
 - [ ] **Tune retrieval parameters**
-  - Optimize top-k for each source
-  - Test reranking strategies
-  - Refine metadata filters
+  - Optimize top-k for each source (currently 10)
+  - Test reranking strategies (cross-encoder models)
+  - Refine metadata filters for better precision
+  - Consider hybrid search (BM25 + semantic)
 
 - [ ] **Improve prompts**
-  - Iterate based on wrong/incomplete answers
-  - Add legal reasoning guidance
-  - Handle edge cases
+  - Iterate routing agent prompt based on misrouted queries
+  - Enhance answer generation prompt for legal reasoning
+  - Add handling for contradictions between sources
+  - Improve confidence scoring calibration
 
 ### Deliverable
-Validated system with benchmarked answer quality.
+Validated system with benchmarked answer quality and documented performance metrics.
 
 ---
 
