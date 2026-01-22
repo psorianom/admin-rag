@@ -1257,7 +1257,7 @@ See "Cost Analysis: Production Infrastructure" section below for complete breakd
 | **AWS ECR** | Docker image storage | 500MB/month (12 months for new accounts) | ~1GB image | **€0-0.10** | €0.10/GB/month after free tier |
 | **Lambda Function URL** | Public HTTPS endpoint | Included with Lambda | N/A | **€0** | No additional cost beyond Lambda invocations |
 | **CloudWatch Logs** | Application logging | 5GB ingestion, 5GB storage/month | ~100MB/month | **€0** | Within free tier for low traffic |
-| **Qdrant Cloud** | Vector database | 1GB storage, unlimited requests | 523MB (25,798 vectors) | **€0** | Free tier covers full dataset |
+| **Qdrant Cloud** | Vector database, Free tier | 1GB storage, unlimited requests | 523MB (25,798 vectors) | **€0** | Free tier permanent. Next tier: $25/month (4GB) if scaling |
 | **OpenAI API** | GPT-4o-mini (routing + generation) | None | Variable by query volume | **€0.00012/query** | Routing: €0.000023<br/>Generation: €0.0001 |
 | **Vast.ai** | GPU embedding generation (one-time) | None | 25,798 chunks embedded | **€0.20** (paid) | One-time cost, already completed |
 
@@ -1272,12 +1272,34 @@ See "Cost Analysis: Production Infrastructure" section below for complete breakd
 
 *Lambda remains free up to 1M requests/month. Heavy production would use ~10-100k GB-seconds, still within 400k free tier.
 
+### Qdrant Cloud Pricing Details
+
+| Tier | Storage | RAM | Requests | Monthly Cost | Our Status |
+|------|---------|-----|----------|--------------|------------|
+| **Free** | 1GB | 0.5GB | Unlimited | **$0** | ✅ Current (523MB used) |
+| **Starter** | 4GB | 2GB | Unlimited | **$25** | Room to grow 7.6x |
+| **Standard** | 8GB | 4GB | Unlimited | **$95** | 15x current size |
+| **Business** | Custom | Custom | Unlimited | Custom | Enterprise scale |
+
+**Key points**:
+- Free tier is **permanent** (not trial) with unlimited requests
+- Current usage: 523MB / 1GB (52% of free tier)
+- Headroom: Can add ~20,000 more chunks before needing paid tier
+- Scaling trigger: Would need $25/month tier if exceeding 1GB (e.g., adding 20+ more KALI conventions)
+
+**Qdrant alternatives if costs become concern**:
+1. Self-hosted Qdrant on AWS EC2 (~$10/month for t4g.small + 30GB EBS)
+2. Local Qdrant with docker-compose (if moving to always-on server)
+3. Postgres with pgvector extension (free on existing DB, slower queries)
+
+**Decision**: Free tier is perfect for current scope. Paid tier only needed if significantly expanding dataset.
+
 ### Cost Drivers
 
 **Current (Demo Phase)**: ~€0.01-0.22/month
 - Primary cost: OpenAI API (scales with query volume)
 - AWS services: Free tier covers all usage
-- Qdrant: Free tier sufficient
+- Qdrant: Free tier sufficient (523MB < 1GB permanent limit)
 
 **Future Optimizations** (if scaling):
 1. **Reduce OpenAI calls**: Cache routing decisions for common query patterns
