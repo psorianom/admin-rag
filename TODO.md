@@ -7,11 +7,11 @@
 - ✅ Qdrant Cloud deployment (523MB vectors indexed)
 - ✅ Intelligent routing agent (GPT-4o-mini with convention detection)
 - ✅ Answer generation with citations and confidence scoring
-- ✅ Lambda Function URL infrastructure (fixed API Gateway timeout issue)
+- ✅ Lambda Function URL infrastructure deployed and working
+- ✅ Fixed Lambda Function URL permission issue (both InvokeFunctionUrl + InvokeFunction required)
 
-**Ready for Deployment**:
-- Terraform configuration cleaned up (API Gateway removed, Lambda Function URL added)
-- Run `./cleanup_api_gateway.sh` and `terraform apply` to deploy
+**Live Production URL**:
+- https://zupl7dnbwoqpkamvpxikntjmge0ggnos.lambda-url.eu-west-3.on.aws/
 
 **Next Phase**:
 - Phase 6: Evaluation & quality tuning

@@ -32,11 +32,33 @@ resource "aws_lambda_function" "main" {
   }
 }
 
+# Lambda Function URL requires TWO permissions for auth_type="NONE"
+# See: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+resource "aws_lambda_permission" "function_url_invoke_url" {
+  statement_id           = "FunctionURLAllowPublicAccess"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.main.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+resource "aws_lambda_permission" "function_url_invoke_function" {
+  statement_id  = "FunctionURLInvokeFunction"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.main.function_name
+  principal     = "*"
+}
+
 # Create Lambda Function URL for public access
 # This replaces API Gateway and allows Lambda's full timeout (120s) to be used
 resource "aws_lambda_function_url" "main" {
   function_name      = aws_lambda_function.main.function_name
   authorization_type = "NONE"  # Public access without authentication
+
+  depends_on = [
+    aws_lambda_permission.function_url_invoke_url,
+    aws_lambda_permission.function_url_invoke_function
+  ]
 
   cors {
     allow_origins     = ["*"]
@@ -46,3 +68,4 @@ resource "aws_lambda_function_url" "main" {
     max_age           = 86400
   }
 }
+

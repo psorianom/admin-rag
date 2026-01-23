@@ -12,7 +12,7 @@ Answer: Under the Syntec convention (IDCC 1486), engineers with 2+ years
         Sources: Convention Syntec Article 4.3, Code du travail L1234-1
 ```
 
-**Status**: Intelligent routing and answer generation working. AWS Lambda deployment in progress.
+**Status**: Live on AWS Lambda with Lambda Function URL. Try it at https://zupl7dnbwoqpkamvpxikntjmge0ggnos.lambda-url.eu-west-3.on.aws/
 
 ---
 

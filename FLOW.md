@@ -1600,3 +1600,92 @@ Lambda always completed and generated correct answers (visible in logs), but API
 **Note**: Initially attempted to set `reserved_concurrent_executions = 5` as a cost control measure, but this failed due to AWS account limits (requires minimum 10 unreserved executions).
 
 **Decision**: Removed concurrency limit for demo/testing phase. Lambda will auto-scale within account's default limits (typically 1000 concurrent executions). For free tier usage with low traffic, this is acceptable. If costs become a concern in production, can add CloudWatch alarms or use AWS Budgets for cost monitoring instead.
+
+#### Issue 4: Lambda Function URL Permission Error (403 Forbidden) ✅
+
+**Symptom**: After deploying Lambda Function URL with `authorization_type = "NONE"`, all requests returned:
+```
+{"Message":"Forbidden. For troubleshooting Function URL authorization issues, see: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html"}
+HTTP Status: 403
+```
+
+**Root Cause**: Lambda Function URLs with `authorization_type = "NONE"` require **TWO** resource-based permissions, not just one:
+
+1. `lambda:InvokeFunctionUrl` - Permission to call the Function URL endpoint
+2. `lambda:InvokeFunction` - Permission to actually execute the Lambda function
+
+AWS documentation states:
+> "If a function's resource-based policy doesn't grant `lambda:InvokeFunctionUrl` **and** `lambda:InvokeFunction` permissions, users will get a 403 Forbidden error code when they try to invoke your function URL. This will occur **even if the function URL uses the `NONE` auth type**."
+
+**Why This Happens**:
+- The `NONE` auth type doesn't mean "no security"—it means "no IAM authentication"
+- The resource-based policy is always required and is your only access control mechanism
+- Without both permissions, all requests fail with 403, regardless of auth type setting
+- AWS Console auto-creates both permissions, but Terraform/CLI/CloudFormation require manual configuration
+
+**Initial Terraform Configuration** (incomplete):
+```hcl
+resource "aws_lambda_permission" "function_url" {
+  action                 = "lambda:InvokeFunctionUrl"  # Only one permission ❌
+  function_name          = aws_lambda_function.main.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+```
+
+**Solution**: Added both required permissions:
+```hcl
+# Permission 1: Invoke the Function URL
+resource "aws_lambda_permission" "function_url_invoke_url" {
+  statement_id           = "FunctionURLAllowPublicAccess"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.main.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+# Permission 2: Execute the Lambda function
+resource "aws_lambda_permission" "function_url_invoke_function" {
+  statement_id  = "FunctionURLInvokeFunction"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.main.function_name
+  principal     = "*"
+}
+
+# Create Function URL AFTER permissions
+resource "aws_lambda_function_url" "main" {
+  function_name      = aws_lambda_function.main.function_name
+  authorization_type = "NONE"
+
+  depends_on = [
+    aws_lambda_permission.function_url_invoke_url,
+    aws_lambda_permission.function_url_invoke_function
+  ]
+
+  cors {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE"]
+    allow_headers = ["*"]
+    expose_headers = ["*"]
+    max_age = 86400
+  }
+}
+```
+
+**Deployment Process**:
+1. Deleted all existing Function URLs and permissions (clean slate)
+2. Removed resources from Terraform state
+3. Applied new configuration with both permissions + `depends_on`
+4. Terraform correctly creates permissions first, then Function URL
+5. Tested successfully - HTTP 200 with FastHTML UI loading
+
+**Key Takeaways**:
+- Always check AWS docs when encountering permission errors with new services
+- Terraform doesn't auto-create the second permission (unlike AWS Console)
+- Use `depends_on` to ensure correct creation order
+- Test thoroughly after deployment changes
+- The "NONE" auth type is somewhat misleading - permissions are still required
+
+**Final Working URL**: https://zupl7dnbwoqpkamvpxikntjmge0ggnos.lambda-url.eu-west-3.on.aws/
+
+**Reference**: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html

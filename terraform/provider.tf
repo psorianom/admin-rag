@@ -14,3 +14,7 @@ terraform {
 provider "aws" {
   region = "eu-west-3"
 }
+
+# Data sources for account info
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
